@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Panel — Test Portal</title>
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .section-block{border:1.5px dashed var(--border);border-radius:12px;padding:16px;margin-bottom:16px;background:#fafbfe;}
+  .question-block{border:1px solid var(--border);border-radius:10px;padding:14px;margin:12px 0;background:#fff;}
+  .option-row{display:grid;grid-template-columns:auto 70px 1fr auto;align-items:center;gap:12px;margin-bottom:8px;padding:10px;border:1px solid var(--border);border-radius:8px;}
+  .option-row input[type="radio"]{width:20px;height:20px;flex:none;accent-color:var(--primary);cursor:pointer;margin:0;}
+  .option-row input[type="text"]{width:100%;text-align:center;font-weight:700;}
+  .option-row .img-upload .field{margin-bottom:0;}
+  .option-row .img-upload label{font-size:10.5px;margin-bottom:3px;}
+  .option-row .img-upload input[type="file"]{font-size:12px;}
+  .correct-hint{font-size:10px;color:var(--muted);text-align:center;margin-top:2px;}
+  .thumb{max-height:50px;border-radius:6px;border:1px solid var(--border);margin-top:6px;}
+  .row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .row-3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;}
+  .small-btn{padding:6px 12px;font-size:12px;}
+  .progress-wrap{display:none;background:#fff;border-radius:10px;padding:16px;margin-top:16px;}
+  .progress-bar-bg{background:#eceef3;border-radius:20px;height:10px;overflow:hidden;margin-top:8px;}
+  .progress-bar-fill{background:var(--primary);height:100%;width:0%;transition:width .2s;}
+</style>
+</head>
+<body>
+  <div class="topnav">
+    <div class="brand">Admin Panel <span id="admin-name">Loading...</span></div>
+    <div class="nav-actions">
+      <a href="../student/dashboard.html" target="_blank" class="btn btn-outline btn-sm">👁 Preview as Student</a>
+      <button class="btn btn-outline btn-sm" id="logout-btn">Logout</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="tests">Manage Tests</button>
+      <button class="tab-btn" data-tab="create">Create Test</button>
+      <button class="tab-btn" data-tab="bulk">Bulk Import (JSON)</button>
+      <button class="tab-btn" data-tab="passcode">Passcode</button>
+      <button class="tab-btn" data-tab="results">Results</button>
+    </div>
+
+    <!-- MANAGE TESTS -->
+    <div class="tab-panel" id="panel-tests">
+      <div class="shadow-card" style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>Name</th><th>Duration</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+          <tbody id="tests-table-body"><tr><td colspan="5" class="muted">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CREATE TEST -->
+    <div class="tab-panel" id="panel-create" style="display:none;">
+      <div class="shadow-card">
+        <div class="field">
+          <label>Test Name</label>
+          <input type="text" id="new-test-name" placeholder="e.g. IAT Part Test 2">
+        </div>
+        <div class="row-2">
+          <div class="field"><label>Duration (hours)</label><input type="number" id="new-test-hours" value="3" min="0"></div>
+          <div class="field"><label>Duration (minutes)</label><input type="number" id="new-test-minutes" value="0" min="0" max="59"></div>
+        </div>
+
+        <div id="sections-container"></div>
+        <button class="btn btn-outline" id="add-section-btn">+ Add Section</button>
+
+        <div class="progress-wrap" id="progress-wrap">
+          <p id="progress-text" class="muted">Uploading...</p>
+          <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-bar-fill"></div></div>
+        </div>
+
+        <div class="mt-24">
+          <button class="btn btn-primary" id="create-test-btn">Create Test</button>
+        </div>
+        <div id="create-msg"></div>
+      </div>
+    </div>
+
+    <!-- BULK IMPORT -->
+    <div class="tab-panel" id="panel-bulk" style="display:none;">
+      <div class="shadow-card">
+        <p class="muted">Paste the same JSON export you already have (the raw test JSON with sections, questions, options, images). This will automatically create the whole test — same exam UI as before — without filling any forms.</p>
+        <div class="field">
+          <label>Paste JSON here</label>
+          <textarea id="bulk-json-input" rows="10" placeholder='{"data": {"test": {...}, "sections": [...] } }'></textarea>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:600;color:var(--text);margin-bottom:16px;">
+          <input type="checkbox" id="bulk-mirror-images" checked style="width:auto;">
+          Mirror all images to my own storage (recommended — won't break if the original source goes down)
+        </label>
+        <button class="btn btn-primary" id="bulk-import-btn">Import Test</button>
+
+        <div class="progress-wrap" id="bulk-progress-wrap">
+          <p id="bulk-progress-text" class="muted">Working...</p>
+          <div class="progress-bar-bg"><div class="progress-bar-fill" id="bulk-progress-fill"></div></div>
+        </div>
+        <div id="bulk-msg"></div>
+      </div>
+    </div>
+
+    <!-- PASSCODE -->
+    <div class="tab-panel" id="panel-passcode" style="display:none;">
+      <div class="shadow-card" style="max-width:420px;">
+        <p class="muted">Students need this passcode to sign up. Change it anytime — existing accounts stay unaffected.</p>
+        <div class="field">
+          <label>Current / New Passcode</label>
+          <input type="text" id="passcode-input" placeholder="Loading...">
+        </div>
+        <button class="btn btn-primary" id="save-passcode-btn">Save Passcode</button>
+        <div id="passcode-msg"></div>
+      </div>
+    </div>
+
+    <!-- RESULTS -->
+    <div class="tab-panel" id="panel-results" style="display:none;">
+      <div class="shadow-card">
+        <div class="field" style="max-width:340px;">
+          <label>Select Test</label>
+          <select id="results-test-select"><option>Loading...</option></select>
+        </div>
+        <button class="btn btn-outline btn-sm" id="export-csv-btn">Export CSV</button>
+        <div style="overflow-x:auto;margin-top:16px;">
+          <table>
+            <thead><tr><th>Student</th><th>Email</th><th>Score</th><th>Correct</th><th>Incorrect</th><th>Unattempted</th><th>Time Taken</th><th>Submitted</th></tr></thead>
+            <tbody id="results-table-body"><tr><td colspan="8" class="muted">Select a test above.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../config.js"></script>
+<script src="../lib/supabaseClient.js"></script>
+<script src="admin-app.js"></script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Tests</title>
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .test-card{display:flex;flex-direction:column;gap:10px;}
+  .test-card .name{font-weight:800;font-size:16px;}
+  .test-card .meta{font-size:12.5px;color:var(--muted);}
+  .result-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;
+    border-bottom:1px solid var(--border);font-size:13.5px;}
+  .result-row:last-child{border-bottom:none;}
+</style>
+</head>
+<body>
+  <div class="topnav">
+    <div class="brand">Test Portal <span id="user-name-label">Loading...</span></div>
+    <div class="nav-actions" style="gap:10px;align-items:center;">
+      <span class="pill" id="admin-preview-badge" style="display:none;">👁 Admin Preview Mode</span>
+      <a href="../admin/dashboard.html" id="admin-preview-link" class="btn btn-outline btn-sm" style="display:none;">Back to Admin Panel</a>
+      <button class="btn btn-outline btn-sm" id="logout-btn">Logout</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="tabs">
+      <button class="tab-btn active" id="tab-tests">Available Tests</button>
+      <button class="tab-btn" id="tab-results">My Results</button>
+    </div>
+
+    <div id="tests-panel">
+      <div class="grid grid-3" id="tests-grid">
+        <p class="muted">Loading tests...</p>
+      </div>
+    </div>
+
+    <div id="results-panel" style="display:none;">
+      <div class="shadow-card" id="results-list">
+        <p class="muted">Loading results...</p>
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../config.js"></script>
+<script src="../lib/supabaseClient.js"></script>
+<script>
+let profile;
+
+(async () => {
+  const session = await requireLogin();
+  if(!session) return;
+  profile = await getCurrentProfile();
+  document.getElementById('user-name-label').textContent = `— ${profile?.name || profile?.email || ''}`;
+  if(profile && profile.role === 'admin'){
+    document.getElementById('admin-preview-badge').style.display = 'inline-block';
+    document.getElementById('admin-preview-link').style.display = 'inline-block';
+  }
+  loadTests();
+})();
+
+document.getElementById('logout-btn').addEventListener('click', () => logout());
+
+document.getElementById('tab-tests').addEventListener('click', () => {
+  document.getElementById('tab-tests').classList.add('active');
+  document.getElementById('tab-results').classList.remove('active');
+  document.getElementById('tests-panel').style.display='block';
+  document.getElementById('results-panel').style.display='none';
+});
+document.getElementById('tab-results').addEventListener('click', () => {
+  document.getElementById('tab-results').classList.add('active');
+  document.getElementById('tab-tests').classList.remove('active');
+  document.getElementById('results-panel').style.display='block';
+  document.getElementById('tests-panel').style.display='none';
+  loadResults();
+});
+
+async function loadTests(){
+  const grid = document.getElementById('tests-grid');
+  const { data: tests, error } = await supabaseClient
+    .from('tests').select('*').eq('is_active', true).order('created_at', { ascending: false });
+
+  if(error){ grid.innerHTML = `<p class="error-msg">Could not load tests: ${error.message}</p>`; return; }
+  if(!tests || tests.length===0){ grid.innerHTML = `<p class="muted">No tests available yet. Check back later.</p>`; return; }
+
+  grid.innerHTML = '';
+  tests.forEach(t => {
+    const h = Math.floor(t.duration_ms/3600000);
+    const m = Math.round((t.duration_ms%3600000)/60000);
+    const div = document.createElement('div');
+    div.className = 'shadow-card test-card';
+    div.innerHTML = `
+      <div class="name">${t.name}</div>
+      <div class="meta">Duration: ${h>0?h+'h ':''}${m}m</div>
+      <button class="btn btn-primary btn-sm" style="align-self:flex-start;">Start Test</button>
+    `;
+    div.querySelector('button').addEventListener('click', () => {
+      window.location.href = `test.html?test_id=${t.id}`;
+    });
+    grid.appendChild(div);
+  });
+}
+
+async function loadResults(){
+  const wrap = document.getElementById('results-list');
+  const { data: results, error } = await supabaseClient
+    .from('results')
+    .select('*, tests(name)')
+    .order('submitted_at', { ascending: false });
+
+  if(error){ wrap.innerHTML = `<p class="error-msg">Could not load results: ${error.message}</p>`; return; }
+  if(!results || results.length===0){ wrap.innerHTML = `<p class="muted">You haven't attempted any tests yet.</p>`; return; }
+
+  wrap.innerHTML = results.map(r => `
+    <div class="result-row">
+      <div>
+        <b>${r.tests?.name || 'Test'}</b><br>
+        <span class="muted">${new Date(r.submitted_at).toLocaleString()}</span>
+      </div>
+      <div style="text-align:right;">
+        <span class="badge badge-purple">Score: ${r.total_score}</span><br>
+        <span class="muted" style="font-size:11.5px;">✓${r.total_correct} · ✗${r.total_incorrect} · –${r.total_unattempted}</span>
+      </div>
+    </div>
+  `).join('');
+}
+</script>
+</body>
+</html>

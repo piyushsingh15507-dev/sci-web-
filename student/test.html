@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Test in progress</title>
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  body{margin:0;}
+  #loading-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:14px;}
+
+  #exam{display:none;flex-direction:column;height:100vh;}
+  .topbar{background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:space-between;
+    padding:10px 18px;flex-wrap:wrap;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,0.15);z-index:5;}
+  .topbar .title{font-weight:700;font-size:15px;}
+  .topbar .user{font-size:12px;opacity:.85;}
+  .timer-wrap{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.12);padding:6px 14px;border-radius:8px;}
+  .timer-wrap .lbl{font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.04em;}
+  .timer-wrap .clock{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:.03em;}
+  .timer-warning .clock{color:#ffd6d6;}
+
+  .section-tabs{display:flex;gap:6px;background:var(--primary-dark);padding:8px 18px;overflow-x:auto;}
+  .section-tab{background:rgba(255,255,255,0.08);color:#e8eaf6;border:1px solid rgba(255,255,255,0.15);
+    padding:7px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;}
+  .section-tab.active{background:#fff;color:var(--primary-dark);}
+
+  .exam-body{flex:1;display:flex;overflow:hidden;}
+  .question-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
+  .q-scroll{flex:1;overflow-y:auto;padding:22px 26px;}
+  .q-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;}
+  .q-num-badge{background:var(--primary);color:#fff;font-weight:700;font-size:13px;padding:5px 12px;border-radius:20px;}
+  .q-marks{font-size:12px;color:var(--muted);font-weight:600;}
+  .q-marks span.pos{color:var(--green-dark);}
+  .q-marks span.neg{color:var(--red);}
+  .q-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;}
+  .q-image-wrap{overflow-x:auto;}
+  .options{display:flex;flex-direction:column;gap:10px;}
+  .option{display:flex;align-items:center;gap:12px;border:1.5px solid var(--border);border-radius:10px;
+    padding:12px 14px;cursor:pointer;transition:.12s;background:#fff;}
+  .option:hover{border-color:var(--primary);background:#f5f6fd;}
+  .option.selected{border-color:var(--primary);background:#eef0fd;}
+  .option .opt-letter{width:28px;height:28px;min-width:28px;border-radius:50%;border:2px solid #c7cbdb;
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:var(--muted);}
+  .option.selected .opt-letter{border-color:var(--primary);background:var(--primary);color:#fff;}
+  .option.correct-answer{border-color:var(--green);background:#eafbf0;}
+  .option.correct-answer .opt-letter{border-color:var(--green);background:var(--green);color:#fff;}
+  .option.wrong-selected{border-color:var(--red);background:#fdecec;}
+  .option.wrong-selected .opt-letter{border-color:var(--red);background:var(--red);color:#fff;}
+  .tag{margin-left:auto;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;}
+  .tag.correct{background:#d7f7e2;color:var(--green-dark);}
+  .tag.wrong{background:#fbdada;color:#a51c1f;}
+  .solution-box{margin-top:18px;border-top:2px dashed var(--border);padding-top:16px;}
+  .solution-box h4{margin:0 0 10px;font-size:13px;color:var(--primary-dark);text-transform:uppercase;letter-spacing:.04em;}
+
+  .action-row{display:flex;flex-wrap:wrap;gap:10px;padding:14px 26px;background:#fff;border-top:1px solid var(--border);}
+  .btn-mark{color:#7c3aed;border-color:#d9c9fb;}
+  .btn-clear{color:var(--muted);}
+  .btn-save{background:var(--green);border-color:var(--green);color:#fff;}
+  .btn-save:hover{background:var(--green-dark);}
+  .btn-nav{background:var(--primary);border-color:var(--primary);color:#fff;}
+  .btn-nav:hover{background:var(--primary-dark);}
+  .spacer{flex:1;}
+  .btn-submit{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .btn-submit:hover{background:#e2551f;}
+
+  .sidebar{width:300px;min-width:300px;background:#fff;border-left:1px solid var(--border);
+    display:flex;flex-direction:column;overflow-y:auto;}
+  .sidebar-header{padding:14px 16px 8px;}
+  .sidebar-header .name{font-weight:700;font-size:14px;}
+  .legend{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 16px;font-size:11.5px;border-bottom:1px solid var(--border);}
+  .legend-item{display:flex;align-items:center;gap:6px;color:var(--muted);}
+  .legend-dot{width:16px;height:16px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;
+    color:#fff;font-size:9px;font-weight:800;flex-shrink:0;}
+  .dot-not-visited{background:#e5e7eb;color:#6b7280;}
+  .dot-not-answered{background:var(--red);}
+  .dot-answered{background:var(--green);}
+  .dot-marked{background:var(--purple);}
+  .palette-section-name{padding:10px 16px 4px;font-size:12px;font-weight:800;color:var(--primary-dark);
+    text-transform:uppercase;letter-spacing:.04em;}
+  .palette-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:8px 16px 16px;}
+  .palette-btn{aspect-ratio:1/1;border-radius:8px;border:none;font-weight:700;font-size:13px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;background:#e5e7eb;color:#6b7280;position:relative;}
+  .palette-btn.current{outline:3px solid #ffb020;outline-offset:1px;}
+  .palette-btn.not-answered{background:var(--red);color:#fff;}
+  .palette-btn.answered{background:var(--green);color:#fff;}
+  .palette-btn.marked{background:var(--purple);color:#fff;}
+  .palette-btn.answered-marked{background:var(--purple);color:#fff;}
+  .palette-btn.answered-marked::after{content:'';position:absolute;bottom:2px;right:2px;width:7px;height:7px;
+    border-radius:50%;background:var(--green);border:1px solid #fff;}
+  .sidebar-submit{padding:14px 16px;border-top:1px solid var(--border);margin-top:auto;}
+  .sidebar-submit .btn-submit{width:100%;padding:13px;font-size:14px;border-radius:10px;}
+
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,18,32,0.55);align-items:center;
+    justify-content:center;z-index:50;padding:16px;}
+  .modal-overlay.show{display:flex;}
+  .modal{background:#fff;border-radius:14px;max-width:460px;width:100%;padding:26px 24px;box-shadow:0 20px 60px rgba(0,0,0,0.35);}
+  .modal h3{margin:0 0 6px;font-size:18px;}
+  .modal p{color:var(--muted);font-size:13.5px;margin:0 0 18px;}
+  .modal-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;}
+  .modal-stat{background:#f6f7fb;border-radius:8px;padding:10px 12px;display:flex;justify-content:space-between;
+    align-items:center;font-size:13px;}
+  .modal-actions{display:flex;gap:10px;}
+  .modal-actions button{flex:1;}
+
+  #result{display:none;min-height:100vh;background:var(--bg);}
+  .result-top{background:linear-gradient(135deg,var(--primary),#4c5fd6);color:#fff;padding:30px 20px 60px;text-align:center;}
+  .result-top h1{margin:0 0 4px;font-size:22px;}
+  .result-top p{margin:0;opacity:.85;font-size:13px;}
+  .score-circle{width:150px;height:150px;border-radius:50%;background:#fff;color:var(--primary-dark);
+    margin:22px auto 0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    box-shadow:0 14px 34px rgba(0,0,0,0.25);}
+  .score-circle .num{font-size:34px;font-weight:800;line-height:1;}
+  .score-circle .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-top:4px;}
+  .result-summary{max-width:960px;margin:-40px auto 0;padding:0 20px 30px;}
+  .summary-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:22px;}
+  .summary-card{background:#fff;border-radius:12px;padding:16px;text-align:center;box-shadow:0 6px 18px rgba(20,25,50,0.08);}
+  .summary-card .val{font-size:22px;font-weight:800;}
+  .summary-card .lbl{font-size:11.5px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.03em;}
+  .review-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+  .review-tab{background:#fff;border:1.5px solid var(--border);padding:8px 16px;border-radius:20px;
+    font-size:13px;font-weight:700;cursor:pointer;color:var(--muted);}
+  .review-tab.active{background:var(--primary);border-color:var(--primary);color:#fff;}
+  .review-q-card{background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 4px 14px rgba(20,25,50,0.06);}
+  .review-q-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+  .status-pill{font-size:11px;font-weight:800;padding:4px 11px;border-radius:20px;}
+  .status-pill.correct{background:#d7f7e2;color:var(--green-dark);}
+  .status-pill.incorrect{background:#fbdada;color:#a51c1f;}
+  .status-pill.unattempted{background:#eceef3;color:var(--muted);}
+  .status-pill.marks{background:#e9ecff;color:var(--primary-dark);}
+
+  @media (max-width: 860px){
+    .exam-body{flex-direction:column;}
+    .sidebar{width:100%;min-width:0;border-left:none;border-top:1px solid var(--border);max-height:40vh;}
+    .q-scroll{padding:16px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="spinner" style="border-top-color:var(--primary);border-color:rgba(47,59,143,0.2);border-top-color:var(--primary);"></div>
+  <p class="muted" id="loading-text">Loading test...</p>
+</div>
+
+<div id="exam">
+  <div class="topbar">
+    <div>
+      <div class="title" id="exam-title">Test</div>
+      <div class="user" id="exam-user">Candidate</div>
+    </div>
+    <div class="timer-wrap" id="timer-wrap">
+      <span class="lbl">Time Left</span>
+      <span class="clock" id="clock">--:--:--</span>
+    </div>
+  </div>
+  <div class="section-tabs" id="section-tabs"></div>
+  <div class="exam-body">
+    <div class="question-panel">
+      <div class="q-scroll" id="q-scroll"></div>
+      <div class="action-row">
+        <button class="btn btn-sm btn-mark" id="btn-mark">🚩 Mark for Review &amp; Next</button>
+        <button class="btn btn-sm btn-clear" id="btn-clear">Clear Response</button>
+        <div class="spacer"></div>
+        <button class="btn btn-sm btn-nav" id="btn-prev">◀ Previous</button>
+        <button class="btn btn-sm btn-save" id="btn-save">Save &amp; Next ▶</button>
+      </div>
+    </div>
+    <div class="sidebar">
+      <div class="sidebar-header"><div class="name" id="sidebar-name">Candidate</div></div>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-dot dot-not-visited">–</span>Not Visited</div>
+        <div class="legend-item"><span class="legend-dot dot-not-answered">!</span>Not Answered</div>
+        <div class="legend-item"><span class="legend-dot dot-answered">✓</span>Answered</div>
+        <div class="legend-item"><span class="legend-dot dot-marked">R</span>Marked</div>
+      </div>
+      <div id="palette-container"></div>
+      <div class="sidebar-submit"><button class="btn btn-sm btn-submit" id="btn-submit">Submit Test</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="submit-modal">
+  <div class="modal">
+    <h3>Submit test?</h3>
+    <p>Once submitted, you can't change your answers. Here's your attempt summary:</p>
+    <div class="modal-stats" id="modal-stats"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="modal-cancel">Continue Test</button>
+      <button class="btn btn-submit" id="modal-confirm">Yes, Submit</button>
+    </div>
+  </div>
+</div>
+
+<div id="result">
+  <div class="result-top">
+    <h1 id="result-title">Result</h1>
+    <p id="result-sub">Here's how you performed</p>
+    <div class="score-circle">
+      <div class="num" id="result-score">0</div>
+      <div class="lbl">Total Score</div>
+    </div>
+  </div>
+  <div class="result-summary">
+    <div class="summary-cards" id="summary-cards"></div>
+    <div class="shadow-card" style="margin-bottom:26px;overflow-x:auto;">
+      <table>
+        <thead><tr><th>Section</th><th>Score</th><th>Correct</th><th>Incorrect</th><th>Unattempted</th></tr></thead>
+        <tbody id="section-table-body"></tbody>
+      </table>
+    </div>
+    <div class="review-tabs" id="review-tabs"></div>
+    <div id="review-container"></div>
+    <div class="center mt-24">
+      <a href="dashboard.html" class="btn btn-primary">Back to Dashboard</a>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../config.js"></script>
+<script src="../lib/supabaseClient.js"></script>
+<script src="test-app.js"></script>
+</body>
+</html>
