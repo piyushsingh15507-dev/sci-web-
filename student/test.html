@@ -102,6 +102,16 @@
   .modal-actions{display:flex;gap:10px;}
   .modal-actions button{flex:1;}
 
+  #violation-modal .modal{border:3px solid var(--red);}
+  #violation-modal h3{color:#a51c1f;}
+
+  .tab-warning-banner{
+    display:none;position:fixed;top:0;left:0;right:0;z-index:60;
+    background:var(--red);color:#fff;text-align:center;padding:10px;font-weight:700;font-size:13.5px;
+  }
+  .tab-warning-banner.show{display:block;}
+  body.exam-active{user-select:none;-webkit-user-select:none;}
+
   #result{display:none;min-height:100vh;background:var(--bg);}
   .result-top{background:linear-gradient(135deg,var(--primary),#4c5fd6);color:#fff;padding:30px 20px 60px;text-align:center;}
   .result-top h1{margin:0 0 4px;font-size:22px;}
@@ -136,6 +146,8 @@
 </style>
 </head>
 <body>
+
+<div class="tab-warning-banner" id="tab-warning-banner">⚠ Tab switch detected! Stay on this page — repeated switching may be reported.</div>
 
 <div id="loading-screen">
   <div class="spinner" style="border-top-color:var(--primary);border-color:rgba(47,59,143,0.2);border-top-color:var(--primary);"></div>
@@ -187,6 +199,16 @@
     <div class="modal-actions">
       <button class="btn btn-outline" id="modal-cancel">Continue Test</button>
       <button class="btn btn-submit" id="modal-confirm">Yes, Submit</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="violation-modal">
+  <div class="modal">
+    <h3 id="violation-title">⚠ Fullscreen Exit Detected</h3>
+    <p id="violation-text">You exited fullscreen mode. This is being recorded.</p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="violation-resume-btn" style="flex:1;">Resume in Fullscreen</button>
     </div>
   </div>
 </div>

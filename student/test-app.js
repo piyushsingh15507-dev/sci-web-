@@ -9,6 +9,9 @@ let curSection = 0, curQuestion = 0;
 let submitted = false;
 let answers = [];
 let totalMarksPossible = 0;
+let tabSwitchCount = 0;
+let fullscreenExitCount = 0;
+const MAX_FULLSCREEN_EXITS = 3;
 
 const params = new URLSearchParams(window.location.search);
 const testId = params.get('test_id');
@@ -94,6 +97,87 @@ function startExam(){
   buildPalette();
   visit(0,0);
   startTimer();
+  document.body.classList.add('exam-active');
+  enterFullscreen();
+  setupAntiCheat();
+}
+
+// ===================== ANTI-CHEATING =====================
+function enterFullscreen(){
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+  if(req) req.call(el).catch(()=>{ /* user may have blocked it; still proceed */ });
+}
+function isFullscreen(){
+  return !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+}
+
+function setupAntiCheat(){
+  // Block right-click
+  document.addEventListener('contextmenu', e => { if(!submitted) e.preventDefault(); });
+  // Block copy
+  document.addEventListener('copy', e => { if(!submitted && document.getElementById('exam').style.display!=='none') e.preventDefault(); });
+  // Block common devtools / view-source shortcuts
+  document.addEventListener('keydown', e => {
+    if(submitted) return;
+    const k = e.key ? e.key.toUpperCase() : '';
+    const blocked =
+      k === 'F12' ||
+      (e.ctrlKey && e.shiftKey && ['I','J','C'].includes(k)) ||
+      (e.ctrlKey && k === 'U') ||
+      (e.metaKey && e.altKey && ['I','J','C'].includes(k));
+    if(blocked) e.preventDefault();
+  });
+
+  // Tab switch detection
+  document.addEventListener('visibilitychange', () => {
+    if(submitted) return;
+    if(document.visibilityState === 'hidden'){
+      tabSwitchCount++;
+      const banner = document.getElementById('tab-warning-banner');
+      banner.textContent = `⚠ Tab switch detected (${tabSwitchCount})! Stay on this page — this is being recorded.`;
+    }
+  });
+  window.addEventListener('focus', () => {
+    if(submitted) return;
+    if(tabSwitchCount > 0){
+      const banner = document.getElementById('tab-warning-banner');
+      banner.classList.add('show');
+      setTimeout(()=>banner.classList.remove('show'), 4000);
+    }
+  });
+
+  // Fullscreen exit detection
+  ['fullscreenchange','webkitfullscreenchange','msfullscreenchange'].forEach(evt => {
+    document.addEventListener(evt, onFullscreenChange);
+  });
+
+  document.getElementById('violation-resume-btn').addEventListener('click', () => {
+    document.getElementById('violation-modal').classList.remove('show');
+    enterFullscreen();
+  });
+}
+
+function onFullscreenChange(){
+  if(submitted) return;
+  if(!isFullscreen()){
+    fullscreenExitCount++;
+    if(fullscreenExitCount >= MAX_FULLSCREEN_EXITS){
+      finishSubmit(false, 'fullscreen');
+      return;
+    }
+    const modal = document.getElementById('violation-modal');
+    const title = document.getElementById('violation-title');
+    const text = document.getElementById('violation-text');
+    if(fullscreenExitCount === 1){
+      title.textContent = '⚠ Warning 1/3 — Fullscreen Exited';
+      text.textContent = "You must stay in fullscreen during the test. Exiting 3 times will auto-submit your test.";
+    } else if(fullscreenExitCount === 2){
+      title.textContent = '🚨 Warning 2/3 — Final Warning';
+      text.textContent = "One more exit and your test will be auto-submitted immediately!";
+    }
+    modal.classList.add('show');
+  }
 }
 
 // ===================== TIMER =====================
@@ -263,13 +347,22 @@ function openSubmitModal(){
   document.getElementById('submit-modal').classList.add('show');
 }
 
-async function finishSubmit(auto){
+async function finishSubmit(auto, reason){
   if(submitted) return;
   submitted = true;
   clearInterval(timerInterval);
+  document.body.classList.remove('exam-active');
+  if(isFullscreen()){
+    const exitFn = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+    if(exitFn) exitFn.call(document).catch(()=>{});
+  }
+  document.getElementById('violation-modal').classList.remove('show');
+  document.getElementById('tab-warning-banner').classList.remove('show');
   document.getElementById('exam').style.display='none';
   document.getElementById('loading-screen').style.display='flex';
-  document.getElementById('loading-text').textContent = 'Submitting your answers...';
+  document.getElementById('loading-text').textContent = reason==='fullscreen'
+    ? 'Too many fullscreen exits — auto-submitting your test...'
+    : 'Submitting your answers...';
 
   // Build the answers payload { question_id: chosen_option_id }
   const payload = {};
@@ -283,7 +376,9 @@ async function finishSubmit(auto){
   const { data, error } = await supabaseClient.rpc('submit_attempt', {
     p_test_id: testId,
     p_answers: payload,
-    p_time_taken_ms: timeUsedMs
+    p_time_taken_ms: timeUsedMs,
+    p_tab_switches: tabSwitchCount,
+    p_fullscreen_exits: fullscreenExitCount
   });
 
   document.getElementById('loading-screen').style.display='none';
@@ -292,12 +387,13 @@ async function finishSubmit(auto){
     alert('Submission failed: ' + error.message + '\nPlease try again or contact your admin.');
     submitted = false;
     document.getElementById('exam').style.display='flex';
+    document.body.classList.add('exam-active');
     startTimer(); // resume, in case of transient error (not auto-submit case)
     return;
   }
 
   document.getElementById('result').style.display='block';
-  renderResult(data, auto);
+  renderResult(data, auto || reason==='fullscreen');
   window.scrollTo(0,0);
 }
 
@@ -309,9 +405,13 @@ function fmtHMS(ms){
 }
 
 function renderResult(data, auto){
-  document.getElementById('result-sub').textContent = auto
+  let subText = auto
     ? "Time's up — your test was auto-submitted."
     : "Here's how you performed.";
+  if(fullscreenExitCount >= MAX_FULLSCREEN_EXITS){
+    subText = "Your test was auto-submitted after repeated fullscreen exits.";
+  }
+  document.getElementById('result-sub').textContent = subText;
   document.getElementById('result-score').textContent = `${data.total_score} / ${totalMarksPossible}`;
 
   document.getElementById('summary-cards').innerHTML = `

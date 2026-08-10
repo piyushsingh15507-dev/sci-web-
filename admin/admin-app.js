@@ -496,15 +496,15 @@ let currentResultsData = [];
 
 async function loadResultsTable(testId){
   const tbody = document.getElementById('results-table-body');
-  tbody.innerHTML = `<tr><td colspan="8" class="muted">Loading...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="10" class="muted">Loading...</td></tr>`;
   const { data, error } = await supabaseClient
     .from('results')
     .select('*, profiles(name, email, role)')
     .eq('test_id', testId)
     .order('submitted_at', { ascending:false });
-  if(error){ tbody.innerHTML = `<tr><td colspan="8" class="error-msg">${error.message}</td></tr>`; return; }
+  if(error){ tbody.innerHTML = `<tr><td colspan="10" class="error-msg">${error.message}</td></tr>`; return; }
   currentResultsData = (data || []).filter(r => r.profiles?.role !== 'admin'); // hide admin's own preview attempts
-  if(currentResultsData.length===0){ tbody.innerHTML = `<tr><td colspan="8" class="muted">No attempts yet for this test.</td></tr>`; return; }
+  if(currentResultsData.length===0){ tbody.innerHTML = `<tr><td colspan="10" class="muted">No attempts yet for this test.</td></tr>`; return; }
 
   tbody.innerHTML = currentResultsData.map(r => `
     <tr>
@@ -515,6 +515,8 @@ async function loadResultsTable(testId){
       <td style="color:#c0292c;">${r.total_incorrect}</td>
       <td class="muted">${r.total_unattempted}</td>
       <td class="muted">${Math.round(r.time_taken_ms/60000)}m</td>
+      <td style="color:${r.tab_switch_count>0?'#c0292c':'var(--muted)'};font-weight:${r.tab_switch_count>0?'700':'400'};">${r.tab_switch_count ?? 0}</td>
+      <td style="color:${r.fullscreen_exit_count>0?'#c0292c':'var(--muted)'};font-weight:${r.fullscreen_exit_count>0?'700':'400'};">${r.fullscreen_exit_count ?? 0}</td>
       <td class="muted">${new Date(r.submitted_at).toLocaleString()}</td>
     </tr>
   `).join('');
@@ -522,10 +524,11 @@ async function loadResultsTable(testId){
 
 document.getElementById('export-csv-btn').addEventListener('click', () => {
   if(currentResultsData.length===0){ alert('No results to export.'); return; }
-  const header = ['Name','Email','Score','Correct','Incorrect','Unattempted','TimeTakenMin','SubmittedAt'];
+  const header = ['Name','Email','Score','Correct','Incorrect','Unattempted','TimeTakenMin','TabSwitches','FullscreenExits','SubmittedAt'];
   const rows = currentResultsData.map(r => [
     r.profiles?.name || '', r.profiles?.email || '', r.total_score, r.total_correct,
     r.total_incorrect, r.total_unattempted, Math.round(r.time_taken_ms/60000),
+    r.tab_switch_count ?? 0, r.fullscreen_exit_count ?? 0,
     new Date(r.submitted_at).toISOString()
   ]);
   const csv = [header, ...rows].map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
