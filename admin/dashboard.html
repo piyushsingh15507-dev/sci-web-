@@ -22,12 +22,40 @@
   .progress-wrap{display:none;background:#fff;border-radius:10px;padding:16px;margin-top:16px;}
   .progress-bar-bg{background:#eceef3;border-radius:20px;height:10px;overflow:hidden;margin-top:8px;}
   .progress-bar-fill{background:var(--primary);height:100%;width:0%;transition:width .2s;}
+
+  /* ---------- Dark mode ---------- */
+  body.dark-mode{
+    --bg:#0f1116; --card:#181b22; --border:#2a2e38; --text:#e7e9ee; --muted:#98a0b3; --primary:#5b7cfa; --primary-dark:#3d55c9;
+  }
+  body.dark-mode{ background:var(--bg); color:var(--text); }
+  body.dark-mode .section-block{ background:#1c2029; border-color:var(--border); }
+  body.dark-mode .question-block{ background:var(--card); border-color:var(--border); }
+  body.dark-mode .option-row{ background:var(--card); border-color:var(--border); }
+  body.dark-mode input, body.dark-mode select, body.dark-mode textarea{ background:#22262f; color:var(--text); border-color:var(--border); }
+  body.dark-mode .progress-wrap{ background:var(--card); }
+  body.dark-mode .badge-gray{ background:#2a2e38; color:var(--muted); }
+  body.dark-mode table thead th{ background:#20242d; }
+  body.dark-mode tbody tr:not(:last-child) td{ border-color:var(--border); }
+  body.dark-mode .tab-btn{ background:var(--card); border-color:var(--border); color:var(--muted); }
+  body.dark-mode .tab-btn.active{ background:var(--primary); border-color:var(--primary); color:#fff; }
+  body.dark-mode .shadow-card, body.dark-mode .card{ background:var(--card); border-color:var(--border); }
+  body.dark-mode .btn-outline{ background:var(--card); border-color:var(--border); color:var(--text); }
+  body.dark-mode .btn-outline:hover{ background:#22262f; }
+  body.dark-mode .error-msg{ background:#3a1f22; border-color:#5c2a2f; color:#ff9da3; }
+  body.dark-mode .success-msg{ background:#123326; border-color:#1d5c3f; color:#7be6ac; }
+  body.dark-mode .modal{ background:var(--card); }
+  body.dark-mode .modal-stat{ background:#20242d; }
+  body.dark-mode label{ color:var(--muted); }
+  .theme-toggle{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.15);border:none;
+    color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;}
+  .theme-toggle:hover{background:rgba(255,255,255,0.25);}
 </style>
 </head>
 <body>
   <div class="topnav">
     <div class="brand">Admin Panel <span id="admin-name">Loading...</span></div>
     <div class="nav-actions">
+      <button class="theme-toggle" id="theme-toggle-btn">🌙 Dark Mode</button>
       <a href="../student/dashboard.html" target="_blank" class="btn btn-outline btn-sm">👁 Preview as Student</a>
       <button class="btn btn-outline btn-sm" id="logout-btn">Logout</button>
     </div>

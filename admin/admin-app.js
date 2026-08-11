@@ -1,5 +1,22 @@
 let adminProfile = null;
 
+// ===================== THEME (DARK / LIGHT) =====================
+(function initTheme(){
+  const saved = localStorage.getItem('admin-theme');
+  if(saved === 'dark') document.body.classList.add('dark-mode');
+  updateThemeBtnLabel();
+})();
+function updateThemeBtnLabel(){
+  const btn = document.getElementById('theme-toggle-btn');
+  if(!btn) return;
+  btn.textContent = document.body.classList.contains('dark-mode') ? '☀️ Light Mode' : '🌙 Dark Mode';
+}
+document.getElementById('theme-toggle-btn').addEventListener('click', () => {
+  document.body.classList.toggle('dark-mode');
+  localStorage.setItem('admin-theme', document.body.classList.contains('dark-mode') ? 'dark' : 'light');
+  updateThemeBtnLabel();
+});
+
 (async () => {
   adminProfile = await requireAdmin();
   if(!adminProfile) return;

@@ -36,7 +36,21 @@
         <label>Password</label>
         <input type="password" id="login-password" required placeholder="••••••••">
       </div>
+      <div style="text-align:right;margin:-8px 0 16px;">
+        <a href="#" id="forgot-password-link" style="font-size:12.5px;">Forgot password?</a>
+      </div>
       <button type="submit" class="btn btn-primary btn-block" id="login-btn">Login</button>
+    </form>
+
+    <!-- FORGOT PASSWORD FORM -->
+    <form id="forgot-form" style="display:none;">
+      <p class="sub" style="margin:0 0 16px;">Enter your account email — we'll send you a secure link to set a new password.</p>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="forgot-email" required placeholder="you@example.com">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="forgot-btn">Send Reset Link</button>
+      <button type="button" class="btn btn-outline btn-block mt-8" id="forgot-back-btn">Back to Login</button>
     </form>
 
     <!-- SIGNUP FORM -->
@@ -69,18 +83,44 @@ const tabLogin = document.getElementById('tab-login');
 const tabSignup = document.getElementById('tab-signup');
 const loginForm = document.getElementById('login-form');
 const signupForm = document.getElementById('signup-form');
+const forgotForm = document.getElementById('forgot-form');
 const subtitle = document.getElementById('subtitle');
 const msgArea = document.getElementById('msg-area');
 
-tabLogin.addEventListener('click', () => {
+function showLogin(){
   tabLogin.classList.add('active'); tabSignup.classList.remove('active');
-  loginForm.style.display='block'; signupForm.style.display='none';
+  loginForm.style.display='block'; signupForm.style.display='none'; forgotForm.style.display='none';
+  document.querySelector('.tabs').style.display='flex';
   subtitle.textContent='Login to continue'; msgArea.innerHTML='';
-});
+}
+tabLogin.addEventListener('click', showLogin);
 tabSignup.addEventListener('click', () => {
   tabSignup.classList.add('active'); tabLogin.classList.remove('active');
-  signupForm.style.display='block'; loginForm.style.display='none';
+  signupForm.style.display='block'; loginForm.style.display='none'; forgotForm.style.display='none';
   subtitle.textContent='Create your account with the access passcode'; msgArea.innerHTML='';
+});
+
+document.getElementById('forgot-password-link').addEventListener('click', (e) => {
+  e.preventDefault();
+  document.querySelector('.tabs').style.display='none';
+  loginForm.style.display='none'; signupForm.style.display='none'; forgotForm.style.display='block';
+  subtitle.textContent='Reset your password'; msgArea.innerHTML='';
+});
+document.getElementById('forgot-back-btn').addEventListener('click', showLogin);
+
+forgotForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  msgArea.innerHTML='';
+  const btn = document.getElementById('forgot-btn');
+  btn.disabled = true; btn.textContent = 'Sending...';
+  const email = document.getElementById('forgot-email').value.trim();
+
+  const redirectTo = window.location.origin + window.location.pathname.replace(/login\.html$/, '') + 'reset-password.html';
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
+
+  btn.disabled = false; btn.textContent = 'Send Reset Link';
+  if(error){ showError(error.message); return; }
+  showSuccess("If that email has an account, a reset link has been sent. Check your inbox (and spam folder).");
 });
 
 function showError(msg){ msgArea.innerHTML = `<div class="error-msg">${msg}</div>`; }

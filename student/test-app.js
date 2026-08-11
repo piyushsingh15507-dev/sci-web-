@@ -12,6 +12,8 @@ let totalMarksPossible = 0;
 let tabSwitchCount = 0;
 let fullscreenExitCount = 0;
 const MAX_FULLSCREEN_EXITS = 3;
+let questionTimerInterval = null;
+let questionEnterTs = 0;
 
 const params = new URLSearchParams(window.location.search);
 const testId = params.get('test_id');
@@ -91,7 +93,14 @@ function startExam(){
   if(profile && profile.role === 'admin'){
     document.getElementById('exam-user').textContent += ' — 👁 Admin Preview Mode';
   }
-  document.getElementById('sidebar-name').textContent = profile?.name || profile?.email || 'Candidate';
+  const displayName = profile?.name || profile?.email || 'Candidate';
+  document.getElementById('sidebar-name').textContent = displayName;
+  const initials = displayName.trim().split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()).join('') || 'C';
+  const avatarColors = ['#2f6fed','#7c5cf0','#22a06b','#f5a524','#e5484d','#0ea5b7'];
+  const colorIdx = displayName.length % avatarColors.length;
+  const avatarEl = document.getElementById('avatar-circle');
+  avatarEl.textContent = initials;
+  avatarEl.style.background = avatarColors[colorIdx];
   document.getElementById('result-title').textContent = testRow.name + ' — Result';
   buildSectionTabs();
   buildPalette();
@@ -246,6 +255,21 @@ function refreshPalette(){
     b.className = 'palette-btn ' + answers[si][qi].status;
     if(si===curSection && qi===curQuestion) b.classList.add('current');
   }));
+  updateProgressCounts();
+}
+function updateProgressCounts(){
+  let answeredCt=0, notAnsweredCt=0, markedCt=0, notVisitedCt=0;
+  answers.forEach(secArr=>secArr.forEach(st=>{
+    if(st.status==='answered'||st.status==='answered-marked') answeredCt++;
+    else if(st.status==='not-answered') notAnsweredCt++;
+    else if(st.status==='marked') markedCt++;
+    else notVisitedCt++;
+  }));
+  const set = (id,val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  set('cnt-answered', answeredCt);
+  set('cnt-not-answered', notAnsweredCt);
+  set('cnt-marked', markedCt);
+  set('cnt-not-visited', notVisitedCt);
 }
 
 // ===================== NAVIGATION =====================
@@ -253,19 +277,50 @@ function visit(si,qi){
   curSection=si; curQuestion=qi;
   const st = answers[si][qi];
   if(st.status==='not-visited') st.status='not-answered';
+  startQuestionTimer();
   renderQuestion();
   refreshSectionTabs();
   refreshPalette();
+}
+
+function startQuestionTimer(){
+  clearInterval(questionTimerInterval);
+  questionEnterTs = Date.now();
+  updateQuestionTimerDisplay();
+  questionTimerInterval = setInterval(updateQuestionTimerDisplay, 1000);
+}
+function updateQuestionTimerDisplay(){
+  const el = document.getElementById('q-timer-display');
+  if(!el) return;
+  const secs = Math.floor((Date.now() - questionEnterTs) / 1000);
+  const m = String(Math.floor(secs/60)).padStart(2,'0');
+  const s = String(secs%60).padStart(2,'0');
+  el.textContent = `${m}:${s}`;
 }
 function renderQuestion(){
   const sec = sections[curSection];
   const q = sec.questions[curQuestion];
   const state = answers[curSection][curQuestion];
   const scroll = document.getElementById('q-scroll');
+
+  const statusLabel = state.status==='answered' ? 'Answered'
+    : state.status==='answered-marked' ? 'Answered & Marked'
+    : state.status==='marked' ? 'Marked for Review'
+    : 'Not Answered';
+  const statusCls = (state.status==='answered'||state.status==='answered-marked') ? 'st-answered'
+    : (state.status==='marked') ? 'st-marked' : '';
+
   let html = `
     <div class="q-header">
-      <span class="q-num-badge">${sec.name} · Q${curQuestion+1} of ${sec.questions.length}</span>
-      <span class="q-marks"><span class="pos">+${q.pos}</span> &nbsp;/&nbsp; <span class="neg">-${q.neg}</span></span>
+      <div class="q-header-left">
+        <span class="q-num-badge">Question-${curQuestion+1}</span>
+        <span class="q-status-pill ${statusCls}">${statusLabel}</span>
+      </div>
+      <div class="q-header-right">
+        <span class="q-timer">⏱ <span id="q-timer-display">00:00</span></span>
+        <span class="q-marks"><span class="pos">+${q.pos}</span> / <span class="neg">-${q.neg}</span></span>
+        <button class="btn-save-header" id="btn-save-header">Save</button>
+      </div>
     </div>
     <div class="q-card"><div class="q-image-wrap">${q.img?`<img src="${q.img}" alt="Question">`:'<p>(no image)</p>'}</div></div>
     <div class="q-card"><div class="options">
@@ -279,6 +334,9 @@ function renderQuestion(){
   });
   html += `</div></div>`;
   scroll.innerHTML = html;
+  updateQuestionTimerDisplay();
+
+  document.getElementById('btn-save-header').addEventListener('click', goNext);
 
   scroll.querySelectorAll('.option').forEach(el=>{
     el.addEventListener('click', ()=>{
@@ -351,6 +409,7 @@ async function finishSubmit(auto, reason){
   if(submitted) return;
   submitted = true;
   clearInterval(timerInterval);
+  clearInterval(questionTimerInterval);
   document.body.classList.remove('exam-active');
   if(isFullscreen()){
     const exitFn = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
