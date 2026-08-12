@@ -65,7 +65,8 @@
       </div>
       <div class="field">
         <label>Password</label>
-        <input type="password" id="signup-password" required placeholder="Minimum 6 characters" minlength="6">
+        <input type="password" id="signup-password" required placeholder="Minimum 10 characters" minlength="10">
+        <p class="muted" style="font-size:11.5px;margin:5px 0 0;">Use at least 10 characters. Avoid common passwords like "password123".</p>
       </div>
       <div class="field">
         <label>Access Passcode</label>
@@ -165,6 +166,21 @@ signupForm.addEventListener('submit', async (e) => {
   const email = document.getElementById('signup-email').value.trim();
   const password = document.getElementById('signup-password').value;
   const passcode = document.getElementById('signup-passcode').value.trim();
+
+  // 0. Basic password strength / common-password guard (client-side first line of defense —
+  // Supabase Auth settings should also have "leaked password protection" enabled for full coverage)
+  const COMMON_PASSWORDS = ['password','password1','password123','12345678','123456789','1234567890',
+    'qwertyui','qwerty123','iloveyou','letmein11','admin1234','welcome123','abc123456','passw0rd','123123123'];
+  if(COMMON_PASSWORDS.includes(password.toLowerCase())){
+    btn.disabled=false; btn.textContent='Create Account';
+    showError('That password is too common and easily guessed. Please choose a stronger one.');
+    return;
+  }
+  if(/^[0-9]+$/.test(password) || /^[a-zA-Z]+$/.test(password)){
+    btn.disabled=false; btn.textContent='Create Account';
+    showError('Use a mix of letters and numbers in your password for better security.');
+    return;
+  }
 
   // 1. Check passcode
   const { data: settings, error: settingsErr } = await supabaseClient
