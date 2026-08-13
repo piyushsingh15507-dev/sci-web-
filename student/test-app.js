@@ -22,7 +22,13 @@ const testId = params.get('test_id');
   const session = await requireLogin();
   if(!session) return;
   profile = await getCurrentProfile();
-  if(await checkMaintenanceMode(profile)) return;
+
+  // Check once, before starting — an active timed exam is never interrupted mid-way by maintenance mode.
+  if(await isMaintenanceOn(profile)){
+    document.getElementById('loading-screen').style.display = 'none';
+    showMaintenanceOverlay();
+    return;
+  }
 
   if(!testId){ document.getElementById('loading-text').textContent = 'No test specified.'; return; }
 
