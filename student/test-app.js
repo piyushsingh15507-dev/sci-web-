@@ -22,6 +22,7 @@ const testId = params.get('test_id');
   const session = await requireLogin();
   if(!session) return;
   profile = await getCurrentProfile();
+  if(await checkMaintenanceMode(profile)) return;
 
   if(!testId){ document.getElementById('loading-text').textContent = 'No test specified.'; return; }
 

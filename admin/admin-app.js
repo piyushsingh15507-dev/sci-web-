@@ -24,6 +24,7 @@ document.getElementById('theme-toggle-btn').addEventListener('click', () => {
   loadTestsTable();
   loadPasscode();
   loadResultsTestOptions();
+  loadMaintenanceStatus();
 })();
 
 document.getElementById('logout-btn').addEventListener('click', () => logout());
@@ -499,6 +500,41 @@ document.getElementById('save-passcode-btn').addEventListener('click', async () 
   msgEl.innerHTML = error ? `<div class="error-msg">${error.message}</div>` : `<div class="success-msg">Passcode updated!</div>`;
 });
 
+// ===================== MAINTENANCE MODE =====================
+async function loadMaintenanceStatus(){
+  const { data, error } = await supabaseClient.from('app_settings').select('maintenance_mode').eq('id',1).single();
+  const toggle = document.getElementById('maintenance-toggle');
+  if(!error && data){
+    toggle.checked = !!data.maintenance_mode;
+    updateMaintenanceLabel();
+  }
+}
+function updateMaintenanceLabel(){
+  const toggle = document.getElementById('maintenance-toggle');
+  const label = document.getElementById('maintenance-status-label');
+  if(toggle.checked){
+    label.textContent = 'Offline (Maintenance)';
+    label.style.color = '#c0292c';
+  } else {
+    label.textContent = 'Online';
+    label.style.color = 'var(--green-dark)';
+  }
+}
+document.getElementById('maintenance-toggle').addEventListener('change', async (e) => {
+  const msgEl = document.getElementById('maintenance-msg');
+  const isOn = e.target.checked;
+  updateMaintenanceLabel();
+  const { error } = await supabaseClient.from('app_settings').update({ maintenance_mode: isOn }).eq('id',1);
+  if(error){
+    msgEl.innerHTML = `<div class="error-msg">${error.message}</div>`;
+    e.target.checked = !isOn; // revert on failure
+    updateMaintenanceLabel();
+  } else {
+    msgEl.innerHTML = isOn
+      ? `<div class="success-msg">Student portal is now offline. Students will see the maintenance page.</div>`
+      : `<div class="success-msg">Student portal is back online.</div>`;
+  }
+});
 // ===================== RESULTS =====================
 async function loadResultsTestOptions(){
   const select = document.getElementById('results-test-select');

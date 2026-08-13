@@ -53,6 +53,7 @@ let profile;
   const session = await requireLogin();
   if(!session) return;
   profile = await getCurrentProfile();
+  if(await checkMaintenanceMode(profile)) return;
   document.getElementById('user-name-label').textContent = `— ${profile?.name || profile?.email || ''}`;
   if(profile && profile.role === 'admin'){
     document.getElementById('admin-preview-badge').style.display = 'inline-block';
