@@ -12,6 +12,19 @@
   .result-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;
     border-bottom:1px solid var(--border);font-size:13.5px;}
   .result-row:last-child{border-bottom:none;}
+  .pdf-card{display:flex;flex-direction:column;gap:10px;}
+  .pdf-card .name{font-weight:800;font-size:15px;}
+  .pdf-card .meta{font-size:12px;color:var(--muted);}
+  .pdf-actions{display:flex;gap:8px;}
+  .pdf-modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,18,32,0.7);z-index:60;
+    align-items:center;justify-content:center;padding:20px;}
+  .pdf-modal-overlay.show{display:flex;}
+  .pdf-modal{background:#fff;border-radius:12px;width:100%;max-width:900px;height:85vh;
+    display:flex;flex-direction:column;overflow:hidden;}
+  .pdf-modal-head{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;
+    border-bottom:1px solid var(--border);}
+  .pdf-modal-head button{background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);}
+  .pdf-modal iframe{flex:1;border:none;width:100%;}
 </style>
 </head>
 <body>
@@ -28,6 +41,7 @@
     <div class="tabs">
       <button class="tab-btn active" id="tab-tests">Available Tests</button>
       <button class="tab-btn" id="tab-results">My Results</button>
+      <button class="tab-btn" id="tab-resources">Study Material</button>
     </div>
 
     <div id="tests-panel">
@@ -40,6 +54,22 @@
       <div class="shadow-card" id="results-list">
         <p class="muted">Loading results...</p>
       </div>
+    </div>
+
+    <div id="resources-panel" style="display:none;">
+      <div class="grid grid-3" id="resources-grid">
+        <p class="muted">Loading study material...</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="pdf-modal-overlay" id="pdf-modal-overlay">
+    <div class="pdf-modal">
+      <div class="pdf-modal-head">
+        <b id="pdf-modal-title">PDF</b>
+        <button id="pdf-modal-close">✕</button>
+      </div>
+      <iframe id="pdf-modal-iframe" src=""></iframe>
     </div>
   </div>
 
@@ -64,18 +94,57 @@ let profile;
 
 document.getElementById('logout-btn').addEventListener('click', () => logout());
 
-document.getElementById('tab-tests').addEventListener('click', () => {
-  document.getElementById('tab-tests').classList.add('active');
-  document.getElementById('tab-results').classList.remove('active');
-  document.getElementById('tests-panel').style.display='block';
-  document.getElementById('results-panel').style.display='none';
+const allTabs = ['tests','results','resources'];
+function showTab(name){
+  allTabs.forEach(t => {
+    document.getElementById(`tab-${t}`).classList.toggle('active', t===name);
+    document.getElementById(`${t}-panel`).style.display = (t===name) ? 'block' : 'none';
+  });
+  if(name==='results') loadResults();
+  if(name==='resources') loadResources();
+}
+document.getElementById('tab-tests').addEventListener('click', () => showTab('tests'));
+document.getElementById('tab-results').addEventListener('click', () => showTab('results'));
+document.getElementById('tab-resources').addEventListener('click', () => showTab('resources'));
+
+async function loadResources(){
+  const grid = document.getElementById('resources-grid');
+  const { data, error } = await supabaseClient
+    .from('resources').select('*, tests(name)').order('created_at', { ascending:false });
+  if(error){ grid.innerHTML = `<p class="error-msg">Could not load study material: ${error.message}</p>`; return; }
+  if(!data || data.length===0){ grid.innerHTML = `<p class="muted">No study material added yet.</p>`; return; }
+
+  grid.innerHTML = '';
+  data.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'shadow-card pdf-card';
+    div.innerHTML = `
+      <div class="name">📄 ${r.title}</div>
+      <div class="meta">${r.tests?.name ? 'For: ' + r.tests.name : 'General'}</div>
+      <div class="pdf-actions">
+        <button class="btn btn-primary btn-sm">Preview</button>
+        <a class="btn btn-outline btn-sm" href="${toPdfDownloadUrl(r.url)}" target="_blank" download>Download</a>
+      </div>
+    `;
+    div.querySelector('button').addEventListener('click', () => openPdfPreview(r.title, r.url));
+    grid.appendChild(div);
+  });
+}
+
+function openPdfPreview(title, url){
+  document.getElementById('pdf-modal-title').textContent = title;
+  document.getElementById('pdf-modal-iframe').src = toPdfPreviewUrl(url);
+  document.getElementById('pdf-modal-overlay').classList.add('show');
+}
+document.getElementById('pdf-modal-close').addEventListener('click', () => {
+  document.getElementById('pdf-modal-overlay').classList.remove('show');
+  document.getElementById('pdf-modal-iframe').src = '';
 });
-document.getElementById('tab-results').addEventListener('click', () => {
-  document.getElementById('tab-results').classList.add('active');
-  document.getElementById('tab-tests').classList.remove('active');
-  document.getElementById('results-panel').style.display='block';
-  document.getElementById('tests-panel').style.display='none';
-  loadResults();
+document.getElementById('pdf-modal-overlay').addEventListener('click', (e) => {
+  if(e.target.id === 'pdf-modal-overlay'){
+    document.getElementById('pdf-modal-overlay').classList.remove('show');
+    document.getElementById('pdf-modal-iframe').src = '';
+  }
 });
 
 async function loadTests(){

@@ -281,6 +281,7 @@ function updateProgressCounts(){
 
 // ===================== NAVIGATION =====================
 function visit(si,qi){
+  accumulateQuestionTime(); // save elapsed time on the question we're leaving
   curSection=si; curQuestion=qi;
   const st = answers[si][qi];
   if(st.status==='not-visited') st.status='not-answered';
@@ -288,6 +289,14 @@ function visit(si,qi){
   renderQuestion();
   refreshSectionTabs();
   refreshPalette();
+}
+
+function accumulateQuestionTime(){
+  if(questionEnterTs && answers[curSection] && answers[curSection][curQuestion]){
+    const elapsed = Date.now() - questionEnterTs;
+    const st = answers[curSection][curQuestion];
+    st.timeSpentMs = (st.timeSpentMs || 0) + elapsed;
+  }
 }
 
 function startQuestionTimer(){
@@ -415,6 +424,7 @@ function openSubmitModal(){
 async function finishSubmit(auto, reason){
   if(submitted) return;
   submitted = true;
+  accumulateQuestionTime(); // flush the time on whichever question was open at submit
   clearInterval(timerInterval);
   clearInterval(questionTimerInterval);
   document.body.classList.remove('exam-active');
@@ -470,7 +480,12 @@ function fmtHMS(ms){
   return `${h>0?h+'h ':''}${m}m ${s}s`;
 }
 
+let lastResultData = null;
+
+document.getElementById('btn-download-report').addEventListener('click', downloadReportPdf);
+
 function renderResult(data, auto){
+  lastResultData = data;
   let subText = auto
     ? "Time's up — your test was auto-submitted."
     : "Here's how you performed.";
@@ -565,4 +580,105 @@ function renderReviewSection(si, detailByQ){
     `;
   });
   container.innerHTML = html;
+}
+
+// ===================== PERFORMANCE REPORT (PDF) =====================
+// Generates the report entirely in the browser using data already in memory —
+// nothing is uploaded or stored on our server, it goes straight to the student's download.
+function downloadReportPdf(){
+  if(!lastResultData){ alert('No result available yet.'); return; }
+  if(!window.jspdf){ alert('PDF library failed to load. Please check your internet connection and try again.'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const pageBottom = 280;
+  let y = 20;
+
+  function ensureSpace(lines=1){
+    if(y + lines*6 > pageBottom){ doc.addPage(); y = 20; }
+  }
+
+  doc.setFontSize(16); doc.setFont(undefined,'bold');
+  doc.text(testRow.name + ' - Performance Report', 14, y); y += 9;
+
+  doc.setFontSize(10); doc.setFont(undefined,'normal');
+  doc.text(`Student: ${profile?.name || profile?.email || 'N/A'}`, 14, y); y += 6;
+  doc.text(`Submitted: ${new Date().toLocaleString()}`, 14, y); y += 10;
+
+  doc.setFontSize(13); doc.setFont(undefined,'bold');
+  doc.text(`Total Score: ${lastResultData.total_score} / ${totalMarksPossible}`, 14, y); y += 8;
+  doc.setFont(undefined,'normal'); doc.setFontSize(10);
+  doc.text(`Correct: ${lastResultData.total_correct}    Incorrect: ${lastResultData.total_incorrect}    Unattempted: ${lastResultData.total_unattempted}`, 14, y); y += 6;
+  doc.text(`Time Taken: ${fmtHMS(lastResultData.time_taken_ms)}`, 14, y); y += 12;
+
+  const detailByQ = {};
+  lastResultData.detail.forEach(d => detailByQ[d.question_id] = d);
+
+  const secStats = sections.map((sec, si) => {
+    let correct=0, incorrect=0, unattempted=0, marks=0, timeMs=0;
+    sec.questions.forEach((q, qi) => {
+      const d = detailByQ[q.id];
+      if(d){
+        if(d.outcome==='correct') correct++;
+        else if(d.outcome==='incorrect') incorrect++;
+        else unattempted++;
+        marks += Number(d.gained);
+      }
+      timeMs += (answers[si][qi].timeSpentMs || 0);
+    });
+    const attempted = correct+incorrect;
+    return { name: sec.name, marks, maxMarks: sec.marks, correct, incorrect, unattempted, timeMs,
+      accuracy: attempted>0 ? (correct/attempted*100) : 0 };
+  });
+
+  ensureSpace(3);
+  doc.setFontSize(12); doc.setFont(undefined,'bold');
+  doc.text('Section-wise Performance', 14, y); y += 8;
+  doc.setFontSize(9); doc.setFont(undefined,'bold');
+  doc.text('Section', 14, y); doc.text('Score', 75, y); doc.text('Correct', 100, y);
+  doc.text('Incorrect', 125, y); doc.text('Unatt.', 155, y); doc.text('Time', 175, y);
+  y += 3;
+  doc.setLineWidth(0.2); doc.line(14, y, 196, y); y += 6;
+  doc.setFont(undefined,'normal');
+
+  secStats.forEach(s => {
+    ensureSpace(1);
+    doc.text(s.name, 14, y);
+    doc.text(`${s.marks}/${s.maxMarks}`, 75, y);
+    doc.text(String(s.correct), 100, y);
+    doc.text(String(s.incorrect), 125, y);
+    doc.text(String(s.unattempted), 155, y);
+    doc.text(fmtHMS(s.timeMs), 175, y);
+    y += 7;
+  });
+  y += 6;
+
+  const attemptedSecs = secStats.filter(s => s.correct + s.incorrect > 0);
+  if(attemptedSecs.length){
+    const weakest = [...attemptedSecs].sort((a,b)=>a.accuracy-b.accuracy)[0];
+    ensureSpace(2);
+    doc.setFont(undefined,'bold'); doc.setFontSize(11);
+    doc.text(`Focus Area: ${weakest.name} (${weakest.accuracy.toFixed(0)}% accuracy)`, 14, y); y += 10;
+  }
+
+  let allQTimes = [];
+  sections.forEach((sec, si) => sec.questions.forEach((q, qi) => {
+    allQTimes.push({ label: `${sec.name} — Q${qi+1}`, timeMs: answers[si][qi].timeSpentMs || 0 });
+  }));
+  allQTimes.sort((a,b)=>b.timeMs-a.timeMs);
+  const slowest = allQTimes.filter(t=>t.timeMs>0).slice(0,5);
+  if(slowest.length){
+    ensureSpace(slowest.length + 2);
+    doc.setFont(undefined,'bold'); doc.setFontSize(11);
+    doc.text('Questions That Took the Longest', 14, y); y += 8;
+    doc.setFont(undefined,'normal'); doc.setFontSize(9.5);
+    slowest.forEach(t => {
+      ensureSpace(1);
+      doc.text(`${t.label}  —  ${fmtHMS(t.timeMs)}`, 14, y);
+      y += 6;
+    });
+  }
+
+  const safeTestName = testRow.name.replace(/[^a-z0-9]+/gi, '_');
+  doc.save(`${safeTestName}_Report.pdf`);
 }

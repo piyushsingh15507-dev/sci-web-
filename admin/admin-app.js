@@ -25,6 +25,8 @@ document.getElementById('theme-toggle-btn').addEventListener('click', () => {
   loadPasscode();
   loadResultsTestOptions();
   loadMaintenanceStatus();
+  loadResourceTestOptions();
+  loadResourcesTable();
 })();
 
 document.getElementById('logout-btn').addEventListener('click', () => logout());
@@ -78,6 +80,7 @@ async function loadTestsTable(){
       if(error) alert('Delete failed: ' + error.message);
       loadTestsTable();
       loadResultsTestOptions();
+      loadResourceTestOptions();
     });
   });
 }
@@ -322,6 +325,7 @@ async function createTest(){
     addSection();
     loadTestsTable();
     loadResultsTestOptions();
+    loadResourceTestOptions();
   } catch(err){
     console.error(err);
     progressWrap.style.display = 'none';
@@ -478,6 +482,7 @@ document.getElementById('bulk-import-btn').addEventListener('click', async () =>
     document.getElementById('bulk-json-input').value = '';
     loadTestsTable();
     loadResultsTestOptions();
+    loadResourceTestOptions();
   } catch(err){
     console.error(err);
     progressWrap.style.display = 'none';
@@ -590,4 +595,67 @@ document.getElementById('export-csv-btn').addEventListener('click', () => {
   a.href = URL.createObjectURL(blob);
   a.download = 'results.csv';
   a.click();
+});
+
+// ===================== STUDY MATERIAL (PDFs) =====================
+async function loadResourceTestOptions(){
+  const select = document.getElementById('resource-test-select');
+  if(!select) return;
+  const { data: tests } = await supabaseClient.from('tests').select('id,name').order('created_at', { ascending:false });
+  select.innerHTML = '<option value="">General (shown to everyone)</option>' +
+    (tests || []).map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+}
+
+async function loadResourcesTable(){
+  const tbody = document.getElementById('resources-table-body');
+  if(!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="5" class="muted">Loading...</td></tr>`;
+  const { data, error } = await supabaseClient
+    .from('resources')
+    .select('*, tests(name)')
+    .order('created_at', { ascending:false });
+  if(error){ tbody.innerHTML = `<tr><td colspan="5" class="error-msg">${error.message}</td></tr>`; return; }
+  if(!data || data.length===0){ tbody.innerHTML = `<tr><td colspan="5" class="muted">No PDFs added yet.</td></tr>`; return; }
+
+  tbody.innerHTML = data.map(r => `
+    <tr>
+      <td><b>${r.title}</b></td>
+      <td class="muted">${r.tests?.name || 'General'}</td>
+      <td><a href="${r.url}" target="_blank" style="font-size:12px;">${r.url.length>40 ? r.url.slice(0,40)+'…' : r.url}</a></td>
+      <td class="muted">${new Date(r.created_at).toLocaleDateString()}</td>
+      <td><button class="btn btn-danger small-btn" data-id="${r.id}">Delete</button></td>
+    </tr>
+  `).join('');
+
+  tbody.querySelectorAll('button[data-id]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if(!confirm('Delete this PDF link?')) return;
+      await supabaseClient.from('resources').delete().eq('id', btn.dataset.id);
+      loadResourcesTable();
+    });
+  });
+}
+
+document.getElementById('add-resource-btn').addEventListener('click', async () => {
+  const msgEl = document.getElementById('resource-msg');
+  msgEl.innerHTML = '';
+  const title = document.getElementById('resource-title').value.trim();
+  const url = document.getElementById('resource-url').value.trim();
+  const testId = document.getElementById('resource-test-select').value || null;
+
+  if(!title || !url){ msgEl.innerHTML = `<div class="error-msg">Title and link are both required.</div>`; return; }
+  try { new URL(url); } catch { msgEl.innerHTML = `<div class="error-msg">That doesn't look like a valid URL.</div>`; return; }
+
+  const btn = document.getElementById('add-resource-btn');
+  btn.disabled = true;
+  const { error } = await supabaseClient.from('resources').insert({
+    title, url, test_id: testId, created_by: adminProfile.id
+  });
+  btn.disabled = false;
+
+  if(error){ msgEl.innerHTML = `<div class="error-msg">${error.message}</div>`; return; }
+  msgEl.innerHTML = `<div class="success-msg">PDF added!</div>`;
+  document.getElementById('resource-title').value = '';
+  document.getElementById('resource-url').value = '';
+  loadResourcesTable();
 });

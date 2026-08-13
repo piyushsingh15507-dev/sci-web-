@@ -68,6 +68,7 @@
       <button class="tab-btn" data-tab="bulk">Bulk Import (JSON)</button>
       <button class="tab-btn" data-tab="passcode">Passcode</button>
       <button class="tab-btn" data-tab="results">Results</button>
+      <button class="tab-btn" data-tab="resources">Study Material</button>
     </div>
 
     <!-- MANAGE TESTS -->
@@ -168,6 +169,34 @@
             <tbody id="results-table-body"><tr><td colspan="10" class="muted">Select a test above.</td></tr></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- STUDY MATERIAL (PDFs) -->
+    <div class="tab-panel" id="panel-resources" style="display:none;">
+      <div class="shadow-card" style="max-width:520px;margin-bottom:20px;">
+        <p class="muted">Add a PDF by pasting a link — Google Drive share link, GitHub raw file link, or any direct PDF URL. Nothing is uploaded to our server; it's fetched live from your link every time a student opens it.</p>
+        <div class="field">
+          <label>Title</label>
+          <input type="text" id="resource-title" placeholder="e.g. Biology Formula Sheet">
+        </div>
+        <div class="field">
+          <label>PDF Link (Google Drive / GitHub / direct URL)</label>
+          <input type="text" id="resource-url" placeholder="https://drive.google.com/file/d/.../view or https://raw.githubusercontent.com/.../file.pdf">
+        </div>
+        <div class="field">
+          <label>Link to a specific test (optional)</label>
+          <select id="resource-test-select"><option value="">General (shown to everyone)</option></select>
+        </div>
+        <button class="btn btn-primary" id="add-resource-btn">Add PDF</button>
+        <div id="resource-msg"></div>
+      </div>
+
+      <div class="shadow-card" style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>Title</th><th>Linked Test</th><th>Link</th><th>Added</th><th>Actions</th></tr></thead>
+          <tbody id="resources-table-body"><tr><td colspan="5" class="muted">Loading...</td></tr></tbody>
+        </table>
       </div>
     </div>
   </div>
