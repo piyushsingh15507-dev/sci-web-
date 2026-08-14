@@ -57,6 +57,7 @@ async function loadTestsTable(){
         <td>${t.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-gray">Inactive</span>'}</td>
         <td class="muted">${new Date(t.created_at).toLocaleDateString()}</td>
         <td style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-outline small-btn" data-action="edit" data-id="${t.id}">Edit</button>
           <button class="btn btn-outline small-btn" data-action="toggle" data-id="${t.id}" data-active="${t.is_active}">${t.is_active?'Deactivate':'Activate'}</button>
           <button class="btn btn-danger small-btn" data-action="delete" data-id="${t.id}">Delete</button>
         </td>
@@ -64,6 +65,9 @@ async function loadTestsTable(){
     `;
   }).join('');
 
+  tbody.querySelectorAll('button[data-action="edit"]').forEach(btn => {
+    btn.addEventListener('click', () => editTest(btn.dataset.id));
+  });
   tbody.querySelectorAll('button[data-action="toggle"]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.dataset.id;
@@ -687,3 +691,183 @@ document.getElementById('add-resource-btn').addEventListener('click', async () =
   document.getElementById('resource-url').value = '';
   loadResourcesTable();
 });
+
+// ===================== EDIT TEST (fix images/text/marks/answer without recreating) =====================
+let editState = { testId:null, sections:[], activeSectionIdx:0 };
+
+async function editTest(testId){
+  document.querySelector('.tab-btn[data-tab="edit"]').click();
+  document.getElementById('edit-empty-state').style.display = 'none';
+  document.getElementById('edit-test-wrap').style.display = 'block';
+  document.getElementById('edit-questions-list').innerHTML = '<p class="muted">Loading...</p>';
+
+  const { data: test } = await supabaseClient.from('tests').select('*').eq('id', testId).single();
+  document.getElementById('edit-test-name').value = test.name;
+
+  const { data: sections } = await supabaseClient.from('sections').select('*').eq('test_id', testId).order('order_no');
+  for(const sec of sections){
+    const { data: questions } = await supabaseClient.from('questions').select('*, options(*)').eq('section_id', sec.id).order('order_no');
+    questions.forEach(q => q.options.sort((a,b)=>a.order_no-b.order_no));
+    sec.questions = questions;
+  }
+  editState = { testId, sections, activeSectionIdx: 0 };
+  renderEditSectionTabs();
+  renderEditQuestions();
+}
+
+document.getElementById('edit-save-name-btn').addEventListener('click', async () => {
+  const msg = document.getElementById('edit-name-msg');
+  const name = document.getElementById('edit-test-name').value.trim();
+  if(!name){ msg.innerHTML = '<div class="error-msg">Name can\'t be empty.</div>'; return; }
+  const { error } = await supabaseClient.from('tests').update({ name }).eq('id', editState.testId);
+  msg.innerHTML = error ? `<div class="error-msg">${error.message}</div>` : '<div class="success-msg">Saved.</div>';
+  loadTestsTable();
+});
+
+function renderEditSectionTabs(){
+  const wrap = document.getElementById('edit-section-tabs');
+  wrap.innerHTML = editState.sections.map((s,i) =>
+    `<button class="tab-btn ${i===editState.activeSectionIdx?'active':''}" data-sec-idx="${i}">${s.name} (${s.questions.length})</button>`
+  ).join('');
+  wrap.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      editState.activeSectionIdx = parseInt(btn.dataset.secIdx);
+      renderEditSectionTabs();
+      renderEditQuestions();
+    });
+  });
+}
+
+function renderEditQuestions(){
+  const listEl = document.getElementById('edit-questions-list');
+  const sec = editState.sections[editState.activeSectionIdx];
+  if(!sec || !sec.questions.length){ listEl.innerHTML = '<p class="muted">No questions in this section.</p>'; return; }
+
+  listEl.innerHTML = sec.questions.map(q => `
+    <div class="card mt-16" data-qid="${q.id}">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <b>Question ${q.order_no}</b>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <label style="margin:0;">+<input type="number" step="0.5" class="q-pos" value="${q.positive_marks}" style="width:60px;display:inline-block;"></label>
+          <label style="margin:0;">-<input type="number" step="0.5" class="q-neg" value="${q.negative_marks}" style="width:60px;display:inline-block;"></label>
+          <button class="btn btn-danger btn-sm" data-del-q="${q.id}">Delete Q</button>
+        </div>
+      </div>
+
+      <div class="mt-16">
+        <label>Question Image ${q.image_url ? '' : '<span class="badge badge-gray">none</span>'}</label>
+        ${q.image_url ? `<img src="${q.image_url}" style="max-width:280px;border:1px solid var(--border);border-radius:8px;" class="q-img-preview">` : ''}
+        <input type="file" accept="image/*" class="q-img-file mt-8">
+        <div class="muted" style="font-size:12px;">Uploading replaces the image immediately.</div>
+      </div>
+
+      <div class="field mt-16">
+        <label>Fallback / plain text (shown if there's no image, or as backup)</label>
+        <textarea class="q-text" rows="3">${q.text_content || ''}</textarea>
+      </div>
+
+      <div class="field mt-16">
+        <label>Solution text (optional, shown in result if no solution image)</label>
+        <textarea class="q-soltext" rows="2">${q.solution_text || ''}</textarea>
+      </div>
+
+      <div class="mt-16">
+        <label>Options</label>
+        ${q.options.map(o => `
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px;border:1px solid var(--border);border-radius:8px;" data-oid="${o.id}">
+            <input type="radio" name="correct-${q.id}" class="o-correct" value="${o.id}" ${o.is_correct?'checked':''}>
+            <input type="text" class="o-label" value="${o.label}" style="width:50px;">
+            <input type="text" class="o-text" value="${o.text_content || ''}" placeholder="option text (optional)" style="flex:1;">
+            ${o.image_url ? `<img src="${o.image_url}" style="height:36px;border-radius:4px;">` : ''}
+            <input type="file" accept="image/*" class="o-img-file" style="width:140px;">
+          </div>
+        `).join('')}
+      </div>
+
+      <button class="btn btn-primary btn-block mt-16 save-q-btn" data-qid="${q.id}">Save Question</button>
+      <div class="save-q-msg mt-8"></div>
+    </div>
+  `).join('');
+
+  // delete question
+  listEl.querySelectorAll('[data-del-q]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if(!confirm('Delete this question permanently?')) return;
+      await supabaseClient.from('questions').delete().eq('id', btn.dataset.delQ);
+      const sec2 = editState.sections[editState.activeSectionIdx];
+      sec2.questions = sec2.questions.filter(q => q.id !== btn.dataset.delQ);
+      renderEditSectionTabs();
+      renderEditQuestions();
+    });
+  });
+
+  // instant image replace - question
+  listEl.querySelectorAll('.q-img-file').forEach(input => {
+    input.addEventListener('change', async () => {
+      const file = input.files[0]; if(!file) return;
+      const qid = input.closest('[data-qid]').dataset.qid;
+      input.disabled = true;
+      try{
+        const url = await uploadImage(editState.testId, file, 'q');
+        await supabaseClient.from('questions').update({ image_url: url }).eq('id', qid);
+        const sec2 = editState.sections[editState.activeSectionIdx];
+        const q2 = sec2.questions.find(q=>q.id===qid);
+        q2.image_url = url;
+        renderEditQuestions();
+      }catch(e){ alert(e.message); input.disabled = false; }
+    });
+  });
+
+  // instant image replace - option
+  listEl.querySelectorAll('.o-img-file').forEach(input => {
+    input.addEventListener('change', async () => {
+      const file = input.files[0]; if(!file) return;
+      const oid = input.closest('[data-oid]').dataset.oid;
+      input.disabled = true;
+      try{
+        const url = await uploadImage(editState.testId, file, 'opt');
+        await supabaseClient.from('options').update({ image_url: url }).eq('id', oid);
+        const sec2 = editState.sections[editState.activeSectionIdx];
+        for(const q2 of sec2.questions){
+          const o2 = q2.options.find(o=>o.id===oid);
+          if(o2){ o2.image_url = url; break; }
+        }
+        renderEditQuestions();
+      }catch(e){ alert(e.message); input.disabled = false; }
+    });
+  });
+
+  // save question (text, marks, solution text, option labels/text/correct)
+  listEl.querySelectorAll('.save-q-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const card = btn.closest('[data-qid]');
+      const qid = btn.dataset.qid;
+      const msg = card.querySelector('.save-q-msg');
+      btn.disabled = true;
+      try{
+        const { error: qErr } = await supabaseClient.from('questions').update({
+          text_content: card.querySelector('.q-text').value.trim() || null,
+          solution_text: card.querySelector('.q-soltext').value.trim() || null,
+          positive_marks: parseFloat(card.querySelector('.q-pos').value) || 0,
+          negative_marks: parseFloat(card.querySelector('.q-neg').value) || 0
+        }).eq('id', qid);
+        if(qErr) throw qErr;
+
+        const correctId = card.querySelector('.o-correct:checked')?.value;
+        for(const optRow of card.querySelectorAll('[data-oid]')){
+          const oid = optRow.dataset.oid;
+          const { error: oErr } = await supabaseClient.from('options').update({
+            label: optRow.querySelector('.o-label').value.trim(),
+            text_content: optRow.querySelector('.o-text').value.trim() || null,
+            is_correct: oid === correctId
+          }).eq('id', oid);
+          if(oErr) throw oErr;
+        }
+        msg.innerHTML = '<div class="success-msg">Saved.</div>';
+      }catch(e){
+        msg.innerHTML = `<div class="error-msg">${e.message}</div>`;
+      }
+      btn.disabled = false;
+    });
+  });
+}
