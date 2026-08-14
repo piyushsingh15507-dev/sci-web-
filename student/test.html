@@ -55,9 +55,14 @@
   .q-status-pill.st-marked{background:var(--ex-purple-light);color:var(--ex-purple);}
   .q-header-right{display:flex;align-items:center;gap:10px;}
   .q-timer{display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ex-muted);font-weight:600;}
-  .q-marks{font-size:12px;color:var(--ex-muted);font-weight:600;}
-  .q-marks span.pos{color:var(--ex-green);}
-  .q-marks span.neg{color:var(--ex-red);}
+  .q-marks{font-size:12px;color:var(--ex-muted);font-weight:600;display:flex;align-items:center;gap:6px;}
+  .q-marks .mark-pill{padding:3px 9px;border-radius:20px;font-weight:800;font-size:11.5px;}
+  .q-marks .mark-pill.pos{background:var(--ex-green-light);color:#1e8a3d;}
+  .q-marks .mark-pill.neg{background:var(--ex-red-light);color:#a51c1f;}
+  .btn-header-outline{border:1.5px solid var(--ex-blue);color:var(--ex-blue);background:#fff;font-weight:700;
+    font-size:13px;padding:7px 14px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+  .btn-header-outline:hover{background:var(--ex-blue-light);}
+  .btn-header-outline.active{background:var(--ex-purple-light);border-color:var(--ex-purple);color:var(--ex-purple);}
   .btn-save-header{border:1.5px solid var(--ex-blue);color:var(--ex-blue);background:#fff;font-weight:700;
     font-size:13px;padding:7px 16px;border-radius:8px;cursor:pointer;}
   .btn-save-header:hover{background:var(--ex-blue-light);}
@@ -181,11 +186,7 @@
   .status-pill.marks{background:var(--ex-blue-light);color:var(--ex-blue);}
 
   /* Calculator */
-  .calc-fab{position:fixed;bottom:22px;left:22px;width:52px;height:52px;border-radius:50%;
-    background:var(--ex-blue);color:#fff;border:none;font-size:22px;cursor:pointer;z-index:40;
-    box-shadow:0 8px 20px rgba(47,111,237,0.4);display:flex;align-items:center;justify-content:center;}
-  .calc-fab:hover{background:#2559c9;}
-  .calc-window{display:none;position:fixed;bottom:84px;left:22px;width:280px;background:#fff;
+  .calc-window{display:none;position:fixed;bottom:70px;left:22px;width:280px;background:#fff;
     border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,0.3);z-index:41;overflow:hidden;border:1px solid var(--ex-border);}
   .calc-window.show{display:block;}
   .calc-head{background:var(--ex-blue);color:#fff;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:13px;}
@@ -207,7 +208,6 @@
     .sidebar{width:100%;min-width:0;border-left:none;border-top:1px solid var(--ex-border);max-height:40vh;}
     .q-scroll{padding:16px;}
     .calc-window{right:10px;left:10px;width:auto;}
-    .calc-fab{left:16px;bottom:16px;}
   }
 </style>
 </head>
@@ -238,11 +238,12 @@
     <div class="question-panel">
       <div class="q-scroll" id="q-scroll"></div>
       <div class="action-row">
-        <button class="btn btn-sm btn-mark" id="btn-mark">🚩 Mark for Review &amp; Next</button>
         <button class="btn btn-sm btn-clear" id="btn-clear">Clear Response</button>
-        <div class="spacer"></div>
         <button class="btn btn-sm btn-nav" id="btn-prev">◀ Previous</button>
+        <button class="btn btn-sm btn-nav" id="calc-fab">🧮 Show Calculator</button>
+        <div class="spacer"></div>
         <button class="btn btn-sm btn-save" id="btn-save">Save &amp; Next ▶</button>
+        <button class="btn btn-sm btn-submit" id="btn-submit-bottom">Submit Test</button>
       </div>
     </div>
     <div class="sidebar">
@@ -265,8 +266,6 @@
   </div>
 </div>
 
-<!-- Scientific Calculator -->
-<button class="calc-fab" id="calc-fab" title="Scientific Calculator">🧮</button>
 <div class="calc-window" id="calc-window">
   <div class="calc-head"><span>Scientific Calculator</span><button id="calc-close">✕</button></div>
   <div class="calc-display" id="calc-display">0</div>

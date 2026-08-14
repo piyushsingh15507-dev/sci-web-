@@ -80,10 +80,11 @@ async function loadTestData(){
     questions: qRows.filter(q => q.section_id === sec.id).map(q => ({
       id: q.id,
       img: q.image_url,
+      text: q.text_content,
       pos: q.positive_marks,
       neg: q.negative_marks,
       options: optRows.filter(o => o.question_id === q.id).map(o => ({
-        id: o.id, label: o.label, img: o.image_url
+        id: o.id, label: o.label, img: o.image_url, text: o.text_content
       }))
     }))
   }));
@@ -334,18 +335,19 @@ function renderQuestion(){
       </div>
       <div class="q-header-right">
         <span class="q-timer">⏱ <span id="q-timer-display">00:00</span></span>
-        <span class="q-marks"><span class="pos">+${q.pos}</span> / <span class="neg">-${q.neg}</span></span>
-        <button class="btn-save-header" id="btn-save-header">Save</button>
+        <span class="q-marks"><span class="mark-pill pos">+${q.pos}</span><span class="mark-pill neg">-${q.neg}</span></span>
+        <button class="btn-header-outline ${(state.status==='marked'||state.status==='answered-marked')?'active':''}" id="btn-mark-header">🚩 Mark for Review</button>
+        <button class="btn-save-header" id="btn-save-header">🔖 Save</button>
       </div>
     </div>
-    <div class="q-card"><div class="q-image-wrap">${q.img?`<img src="${q.img}" alt="Question">`:'<p>(no image)</p>'}</div></div>
+    <div class="q-card"><div class="q-image-wrap">${q.img?`<img src="${q.img}" alt="Question">`: q.text ? `<p style="font-size:15px;line-height:1.6;white-space:pre-wrap;">${q.text}</p>` : '<p>(no content)</p>'}</div></div>
     <div class="q-card"><div class="options">
   `;
   q.options.forEach(opt=>{
     const selected = state.selectedOptId===opt.id;
     html += `<div class="option ${selected?'selected':''}" data-optid="${opt.id}">
       <span class="opt-letter">${opt.label}</span>
-      ${opt.img?`<img src="${opt.img}" style="max-height:60px;">`:''}
+      ${opt.img?`<img src="${opt.img}" style="max-height:60px;">`: opt.text ? `<span>${opt.text}</span>` : ''}
     </div>`;
   });
   html += `</div></div>`;
@@ -353,6 +355,11 @@ function renderQuestion(){
   updateQuestionTimerDisplay();
 
   document.getElementById('btn-save-header').addEventListener('click', goNext);
+  document.getElementById('btn-mark-header').addEventListener('click', () => {
+    state.status = state.selectedOptId ? 'answered-marked' : 'marked';
+    refreshPalette();
+    goNext();
+  });
 
   scroll.querySelectorAll('.option').forEach(el=>{
     el.addEventListener('click', ()=>{
@@ -369,12 +376,6 @@ function renderQuestion(){
 
 // ===================== ACTIONS =====================
 document.getElementById('btn-save').addEventListener('click', goNext);
-document.getElementById('btn-mark').addEventListener('click', ()=>{
-  const state = answers[curSection][curQuestion];
-  state.status = state.selectedOptId ? 'answered-marked' : 'marked';
-  refreshPalette();
-  goNext();
-});
 document.getElementById('btn-clear').addEventListener('click', ()=>{
   const state = answers[curSection][curQuestion];
   state.selectedOptId = null;
@@ -394,6 +395,7 @@ function goNext(){
 
 // ===================== SUBMIT =====================
 document.getElementById('btn-submit').addEventListener('click', openSubmitModal);
+document.getElementById('btn-submit-bottom').addEventListener('click', openSubmitModal);
 document.getElementById('modal-cancel').addEventListener('click', ()=>document.getElementById('submit-modal').classList.remove('show'));
 document.getElementById('modal-confirm').addEventListener('click', ()=>{
   document.getElementById('submit-modal').classList.remove('show');
@@ -559,7 +561,7 @@ function renderReviewSection(si, detailByQ){
             <span class="status-pill marks">${d.gained>=0?'+':''}${d.gained} marks</span>
           </div>
         </div>
-        <div class="q-image-wrap">${q.img?`<img src="${q.img}" alt="Question">`:''}</div>
+        <div class="q-image-wrap">${q.img?`<img src="${q.img}" alt="Question">`: q.text ? `<p style="font-size:15px;line-height:1.6;white-space:pre-wrap;">${q.text}</p>` : ''}</div>
         <div class="options" style="margin-top:14px;">
           ${q.options.map(opt=>{
             let cls='option';
@@ -568,13 +570,14 @@ function renderReviewSection(si, detailByQ){
             let tag='';
             if(opt.id === d.correct_option_id) tag='<span class="tag correct">Correct Answer</span>';
             else if(opt.id === d.chosen_option_id) tag='<span class="tag wrong">Your Answer</span>';
-            return `<div class="${cls}"><span class="opt-letter">${opt.label}</span>${opt.img?`<img src="${opt.img}" style="max-height:50px;">`:''}${tag}</div>`;
+            const content = opt.img?`<img src="${opt.img}" style="max-height:50px;">`: opt.text ? `<span>${opt.text}</span>` : '';
+            return `<div class="${cls}"><span class="opt-letter">${opt.label}</span>${content}${tag}</div>`;
           }).join('')}
         </div>
-        ${d.solution_image_url ? `
+        ${(d.solution_image_url || d.solution_text) ? `
           <div class="solution-box">
             <h4>Solution</h4>
-            <div class="q-image-wrap"><img src="${d.solution_image_url}" alt="Solution"></div>
+            <div class="q-image-wrap">${d.solution_image_url ? `<img src="${d.solution_image_url}" alt="Solution">` : `<p style="font-size:14px;line-height:1.6;white-space:pre-wrap;">${d.solution_text}</p>`}</div>
           </div>` : ''}
       </div>
     `;

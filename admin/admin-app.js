@@ -341,6 +341,26 @@ function extractImgSrc(html){
   const m = html.match(/src="([^"]+)"/);
   return m ? m[1] : null;
 }
+// Extracts a plain-text fallback from HTML (strips tags/&nbsp;), used when there's no <img>.
+function extractPlainText(html){
+  if(!html) return null;
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+  return text || null;
+}
+function extractQuestionContent(html){
+  const imgUrl = extractImgSrc(html);
+  return { imgUrl, text: imgUrl ? null : extractPlainText(html) };
+}
+// For options: if there's an image use it. Otherwise, if the raw text is more than just a bare
+// letter (A/B/C/D) — meaning the option itself carries the real answer content — keep it as text.
+// If it's just the bare letter (normal for image-based questions), there's nothing extra to show.
+function extractOptionContent(html){
+  const imgUrl = extractImgSrc(html);
+  if(imgUrl) return { imgUrl, text: null };
+  const text = extractPlainText(html);
+  if(text && /^[A-D]$/i.test(text)) return { imgUrl: null, text: null };
+  return { imgUrl: null, text };
+}
 
 function parseRawTestJson(raw){
   const t = raw.data || raw; // tolerate either wrapped {data:{...}} or bare {test:..., sections:...}
@@ -352,15 +372,23 @@ function parseRawTestJson(raw){
     questions: (s.questions || []).map(q => {
       const pos = (q.marks && q.marks.positive > 0) ? q.marks.positive : 4;
       const neg = (q.marks && q.marks.negative > 0) ? q.marks.negative : 1;
+      const qContent = extractQuestionContent(q.name);
+      const solContent = extractQuestionContent(q.solution);
       return {
-        imgUrl: extractImgSrc(q.name),
-        solImgUrl: extractImgSrc(q.solution),
+        imgUrl: qContent.imgUrl,
+        text: qContent.text,
+        solImgUrl: solContent.imgUrl,
+        solText: solContent.text,
         pos, neg,
-        options: (q.options || []).map(o => ({
-          label: (o.nameText || '').trim() || '?',
-          imgUrl: extractImgSrc(o.name),
-          correct: !!o.isCorrect
-        }))
+        options: (q.options || []).map((o, idx) => {
+          const optContent = extractOptionContent(o.name);
+          return {
+            label: String.fromCharCode(65 + idx), // always positional A/B/C/D
+            imgUrl: optContent.imgUrl,
+            text: optContent.text,
+            correct: !!o.isCorrect
+          };
+        })
       };
     })
   }));
@@ -456,8 +484,8 @@ document.getElementById('bulk-import-btn').addEventListener('click', async () =>
         }
 
         const { data: qRow, error: qErr } = await supabaseClient.from('questions').insert({
-          section_id: secRow.id, image_url: qImgUrl, order_no: qOrder++,
-          positive_marks: q.pos, negative_marks: q.neg, solution_image_url: solImgUrl
+          section_id: secRow.id, image_url: qImgUrl, text_content: q.text, order_no: qOrder++,
+          positive_marks: q.pos, negative_marks: q.neg, solution_image_url: solImgUrl, solution_text: q.solText
         }).select().single();
         if(qErr) throw qErr;
 
@@ -466,7 +494,7 @@ document.getElementById('bulk-import-btn').addEventListener('click', async () =>
           let optImgUrl = opt.imgUrl;
           if(doMirror && opt.imgUrl){ const r = await mirrorImageToStorage(testRow.id, opt.imgUrl, 'opt'); optImgUrl = r.url; bump(r.mirrored); }
           const { error: optErr } = await supabaseClient.from('options').insert({
-            question_id: qRow.id, label: opt.label, image_url: optImgUrl,
+            question_id: qRow.id, label: opt.label, image_url: optImgUrl, text_content: opt.text,
             is_correct: opt.correct, order_no: optOrder++
           });
           if(optErr) throw optErr;
