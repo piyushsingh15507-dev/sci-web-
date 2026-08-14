@@ -1,18 +1,24 @@
 -- ============================================================
--- MIGRATION: Support text-based questions/options (not just images)
--- Run this in Supabase SQL Editor (safe to run once)
+-- FIXED MIGRATION: Support text-based questions/options (not just images)
+-- This version DROPS the old views first (instead of CREATE OR REPLACE),
+-- which avoids Postgres error 42P16 "cannot change name of view column"
+-- Safe to run even if you already ran the broken version earlier.
 -- ============================================================
 
 alter table questions add column if not exists text_content text;
 alter table questions add column if not exists solution_text text;
 alter table options add column if not exists text_content text;
 
--- Refresh the student-safe views to include the new text columns
-create or replace view questions_for_student as
+-- Drop old views first (this is the actual fix — CREATE OR REPLACE
+-- cannot reorder/insert columns in the middle, only DROP+CREATE can)
+drop view if exists questions_for_student;
+drop view if exists options_for_student;
+
+create view questions_for_student as
   select id, section_id, image_url, text_content, order_no, positive_marks, negative_marks
   from questions;
 
-create or replace view options_for_student as
+create view options_for_student as
   select id, question_id, label, image_url, text_content, order_no
   from options;
 
