@@ -69,6 +69,7 @@
       <button class="tab-btn" data-tab="passcode">Passcode</button>
       <button class="tab-btn" data-tab="results">Results</button>
       <button class="tab-btn" data-tab="resources">Study Material</button>
+      <button class="tab-btn" data-tab="edit" id="edit-tab-btn">Edit Test</button>
     </div>
 
     <!-- MANAGE TESTS -->
@@ -78,6 +79,23 @@
           <thead><tr><th>Name</th><th>Duration</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
           <tbody id="tests-table-body"><tr><td colspan="5" class="muted">Loading...</td></tr></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- EDIT TEST -->
+    <div class="tab-panel" id="panel-edit" style="display:none;">
+      <div id="edit-empty-state" class="shadow-card muted">Go to "Manage Tests" and click <b>Edit</b> on a test to fix images, text, marks, or the correct answer without recreating it.</div>
+      <div id="edit-test-wrap" style="display:none;">
+        <div class="shadow-card mt-16" style="margin-bottom:16px;">
+          <label>Test Name</label>
+          <div style="display:flex;gap:8px;">
+            <input id="edit-test-name" type="text">
+            <button class="btn btn-primary" id="edit-save-name-btn">Save Name</button>
+          </div>
+          <div id="edit-name-msg"></div>
+        </div>
+        <div id="edit-section-tabs" class="tabs"></div>
+        <div id="edit-questions-list"></div>
       </div>
     </div>
 
