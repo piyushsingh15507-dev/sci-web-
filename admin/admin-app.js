@@ -340,10 +340,9 @@ async function createTest(){
 }
 
 // ===================== BULK IMPORT (paste JSON) =====================
-function extractImgSrc(html){
-  if(!html) return null;
-  const m = html.match(/src="([^"]+)"/);
-  return m ? m[1] : null;
+function extractAllImgSrcs(html){
+  if(!html) return [];
+  return [...html.matchAll(/<img[^>]*\ssrc="([^"]+)"/g)].map(m => m[1]);
 }
 // Extracts a plain-text fallback from HTML (strips tags/&nbsp;), used when there's no <img>.
 function extractPlainText(html){
@@ -352,18 +351,18 @@ function extractPlainText(html){
   return text || null;
 }
 function extractQuestionContent(html){
-  const imgUrl = extractImgSrc(html);
-  return { imgUrl, text: imgUrl ? null : extractPlainText(html) };
+  const imgUrls = extractAllImgSrcs(html);
+  return { imgUrls, text: imgUrls.length ? null : extractPlainText(html) };
 }
 // For options: if there's an image use it. Otherwise, if the raw text is more than just a bare
 // letter (A/B/C/D) — meaning the option itself carries the real answer content — keep it as text.
 // If it's just the bare letter (normal for image-based questions), there's nothing extra to show.
 function extractOptionContent(html){
-  const imgUrl = extractImgSrc(html);
-  if(imgUrl) return { imgUrl, text: null };
+  const imgUrls = extractAllImgSrcs(html);
+  if(imgUrls.length) return { imgUrls, text: null };
   const text = extractPlainText(html);
-  if(text && /^[A-D]$/i.test(text)) return { imgUrl: null, text: null };
-  return { imgUrl: null, text };
+  if(text && /^[A-D]$/i.test(text)) return { imgUrls: [], text: null };
+  return { imgUrls: [], text };
 }
 
 function parseRawTestJson(raw){
@@ -379,16 +378,16 @@ function parseRawTestJson(raw){
       const qContent = extractQuestionContent(q.name);
       const solContent = extractQuestionContent(q.solution);
       return {
-        imgUrl: qContent.imgUrl,
+        imgUrls: qContent.imgUrls,
         text: qContent.text,
-        solImgUrl: solContent.imgUrl,
+        solImgUrls: solContent.imgUrls,
         solText: solContent.text,
         pos, neg,
         options: (q.options || []).map((o, idx) => {
           const optContent = extractOptionContent(o.name);
           return {
             label: String.fromCharCode(65 + idx), // always positional A/B/C/D
-            imgUrl: optContent.imgUrl,
+            imgUrls: optContent.imgUrls,
             text: optContent.text,
             correct: !!o.isCorrect
           };
@@ -422,6 +421,58 @@ async function mirrorImageToStorage(testId, url, tag){
   }
 }
 
+// Some questions have MULTIPLE <img> tags (e.g. a diagram + a data table as two images).
+// Since each question/option only has one image_url column, we stitch all images for that
+// question vertically into a single combined PNG, so both parts show together as intended.
+function stitchImagesVertically(blobs){
+  return Promise.all(blobs.map(b => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = URL.createObjectURL(b);
+  }))).then(imgs => {
+    const gap = 14;
+    const width = Math.max(...imgs.map(i => i.naturalWidth));
+    const totalHeight = imgs.reduce((sum, i) => sum + i.naturalHeight, 0) + gap * (imgs.length - 1);
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = totalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, totalHeight);
+    let y = 0;
+    for(const img of imgs){
+      const x = Math.round((width - img.naturalWidth) / 2);
+      ctx.drawImage(img, x, y);
+      y += img.naturalHeight + gap;
+    }
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  });
+}
+
+async function mirrorMultiImagesStacked(testId, urls, tag){
+  if(!urls || !urls.length) return { url: null, mirrored: false };
+  if(urls.length === 1) return mirrorImageToStorage(testId, urls[0], tag);
+  try {
+    const blobs = [];
+    for(const u of urls){
+      const resp = await fetch(u);
+      if(!resp.ok) throw new Error('fetch failed: ' + resp.status);
+      blobs.push(await resp.blob());
+    }
+    const stitched = await stitchImagesVertically(blobs);
+    const path = `${testId}/${tag}_${uid()}.png`;
+    const { error } = await supabaseClient.storage.from('test-images')
+      .upload(path, stitched, { contentType: 'image/png' });
+    if(error) throw error;
+    const { data } = supabaseClient.storage.from('test-images').getPublicUrl(path);
+    return { url: data.publicUrl, mirrored: true };
+  } catch(err){
+    // stitching failed (e.g. one URL blocked) — fall back to just the first image so the
+    // question isn't left completely blank
+    return mirrorImageToStorage(testId, urls[0], tag);
+  }
+}
+
 document.getElementById('bulk-import-btn').addEventListener('click', async () => {
   const msgEl = document.getElementById('bulk-msg');
   msgEl.innerHTML = '';
@@ -443,9 +494,9 @@ document.getElementById('bulk-import-btn').addEventListener('click', async () =>
   const totalQuestions = parsed.sections.reduce((n,s)=>n+s.questions.length,0);
   let totalImages = 0;
   parsed.sections.forEach(s=>s.questions.forEach(q=>{
-    if(q.imgUrl) totalImages++;
-    if(q.solImgUrl) totalImages++;
-    q.options.forEach(o=>{ if(o.imgUrl) totalImages++; });
+    if(q.imgUrls.length) totalImages++; // stitched as one upload regardless of count
+    if(q.solImgUrls.length) totalImages++;
+    q.options.forEach(o=>{ if(o.imgUrls.length) totalImages++; });
   }));
 
   const btn = document.getElementById('bulk-import-btn');
@@ -481,10 +532,13 @@ document.getElementById('bulk-import-btn').addEventListener('click', async () =>
 
       let qOrder = 1;
       for(const q of sec.questions){
-        let qImgUrl = q.imgUrl, solImgUrl = q.solImgUrl;
+        let qImgUrl = null, solImgUrl = null;
         if(doMirror){
-          if(q.imgUrl){ const r = await mirrorImageToStorage(testRow.id, q.imgUrl, 'q'); qImgUrl = r.url; bump(r.mirrored); }
-          if(q.solImgUrl){ const r = await mirrorImageToStorage(testRow.id, q.solImgUrl, 'sol'); solImgUrl = r.url; bump(r.mirrored); }
+          if(q.imgUrls.length){ const r = await mirrorMultiImagesStacked(testRow.id, q.imgUrls, 'q'); qImgUrl = r.url; bump(r.mirrored); }
+          if(q.solImgUrls.length){ const r = await mirrorMultiImagesStacked(testRow.id, q.solImgUrls, 'sol'); solImgUrl = r.url; bump(r.mirrored); }
+        } else {
+          qImgUrl = q.imgUrls[0] || null;
+          solImgUrl = q.solImgUrls[0] || null;
         }
 
         const { data: qRow, error: qErr } = await supabaseClient.from('questions').insert({
@@ -495,8 +549,8 @@ document.getElementById('bulk-import-btn').addEventListener('click', async () =>
 
         let optOrder = 1;
         for(const opt of q.options){
-          let optImgUrl = opt.imgUrl;
-          if(doMirror && opt.imgUrl){ const r = await mirrorImageToStorage(testRow.id, opt.imgUrl, 'opt'); optImgUrl = r.url; bump(r.mirrored); }
+          let optImgUrl = opt.imgUrls[0] || null;
+          if(doMirror && opt.imgUrls.length){ const r = await mirrorMultiImagesStacked(testRow.id, opt.imgUrls, 'opt'); optImgUrl = r.url; bump(r.mirrored); }
           const { error: optErr } = await supabaseClient.from('options').insert({
             question_id: qRow.id, label: opt.label, image_url: optImgUrl, text_content: opt.text,
             is_correct: opt.correct, order_no: optOrder++
