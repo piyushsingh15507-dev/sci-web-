@@ -219,24 +219,31 @@ async function loadResults(){
   const wrap = document.getElementById('results-list');
   const { data: results, error } = await supabaseClient
     .from('results')
-    .select('*, tests(name)')
+    .select('*, tests(name, solutions_released)')
     .order('submitted_at', { ascending: false });
 
   if(error){ wrap.innerHTML = `<p class="error-msg">Could not load results: ${error.message}</p>`; return; }
   if(!results || results.length===0){ wrap.innerHTML = `<p class="muted">You haven't attempted any tests yet.</p>`; return; }
 
   wrap.innerHTML = results.map(r => `
-    <div class="result-row">
+    <div class="result-row" data-id="${r.id}" style="cursor:pointer;">
       <div>
         <b>${r.tests?.name || 'Test'}</b><br>
         <span class="muted">${new Date(r.submitted_at).toLocaleString()}</span>
       </div>
       <div style="text-align:right;">
         <span class="badge badge-purple">Score: ${r.total_score}</span><br>
-        <span class="muted" style="font-size:11.5px;">✓${r.total_correct} · ✗${r.total_incorrect} · –${r.total_unattempted}</span>
+        <span class="muted" style="font-size:11.5px;">✓${r.total_correct} · ✗${r.total_incorrect} · –${r.total_unattempted}</span><br>
+        <span class="muted" style="font-size:11px;">${r.tests?.solutions_released ? '🔓 View Solutions' : '🔒 Solutions locked'}</span>
       </div>
     </div>
   `).join('');
+
+  wrap.querySelectorAll('.result-row').forEach(row => {
+    row.addEventListener('click', () => {
+      window.location.href = `test.html?review=${row.dataset.id}`;
+    });
+  });
 }
 </script>
 </body>

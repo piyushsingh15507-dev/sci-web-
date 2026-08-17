@@ -747,7 +747,7 @@ document.getElementById('add-resource-btn').addEventListener('click', async () =
 });
 
 // ===================== EDIT TEST (fix images/text/marks/answer without recreating) =====================
-let editState = { testId:null, sections:[], activeSectionIdx:0 };
+let editState = { testId:null, sections:[], activeSectionIdx:0, solutionsReleased:false };
 
 async function editTest(testId){
   document.querySelector('.tab-btn[data-tab="edit"]').click();
@@ -757,6 +757,7 @@ async function editTest(testId){
 
   const { data: test } = await supabaseClient.from('tests').select('*').eq('id', testId).single();
   document.getElementById('edit-test-name').value = test.name;
+  document.getElementById('edit-max-attempts').value = test.max_attempts || '';
 
   const { data: sections } = await supabaseClient.from('sections').select('*').eq('test_id', testId).order('order_no');
   for(const sec of sections){
@@ -764,10 +765,40 @@ async function editTest(testId){
     questions.forEach(q => q.options.sort((a,b)=>a.order_no-b.order_no));
     sec.questions = questions;
   }
-  editState = { testId, sections, activeSectionIdx: 0 };
+  editState = { testId, sections, activeSectionIdx: 0, solutionsReleased: test.solutions_released };
+  renderSolutionsToggleBtn();
   renderEditSectionTabs();
   renderEditQuestions();
 }
+
+function renderSolutionsToggleBtn(){
+  const btn = document.getElementById('edit-solutions-toggle-btn');
+  if(editState.solutionsReleased){
+    btn.textContent = '🔓 Released — click to hide again';
+    btn.className = 'btn btn-block btn-outline';
+  } else {
+    btn.textContent = '🔒 Release Solutions to Students';
+    btn.className = 'btn btn-block btn-primary';
+  }
+}
+
+document.getElementById('edit-max-attempts').addEventListener('change', async () => {
+  const val = document.getElementById('edit-max-attempts').value.trim();
+  const max_attempts = val ? parseInt(val) : null;
+  const msg = document.getElementById('edit-settings-msg');
+  const { error } = await supabaseClient.from('tests').update({ max_attempts }).eq('id', editState.testId);
+  msg.innerHTML = error ? `<div class="error-msg">${error.message}</div>` : '<div class="success-msg">Attempt limit saved.</div>';
+});
+
+document.getElementById('edit-solutions-toggle-btn').addEventListener('click', async () => {
+  const newVal = !editState.solutionsReleased;
+  const { error } = await supabaseClient.from('tests').update({ solutions_released: newVal }).eq('id', editState.testId);
+  const msg = document.getElementById('edit-settings-msg');
+  if(error){ msg.innerHTML = `<div class="error-msg">${error.message}</div>`; return; }
+  editState.solutionsReleased = newVal;
+  renderSolutionsToggleBtn();
+  msg.innerHTML = '<div class="success-msg">Saved.</div>';
+});
 
 document.getElementById('edit-save-name-btn').addEventListener('click', async () => {
   const msg = document.getElementById('edit-name-msg');

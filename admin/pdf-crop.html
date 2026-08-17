@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF → Test Importer (Beta)</title>
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .layout{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start;}
+  #canvas-wrap{position:relative;display:inline-block;border:1px solid var(--border);border-radius:8px;overflow:auto;max-height:80vh;background:#525659;}
+  #pdf-canvas{display:block;cursor:crosshair;}
+  #crop-box{position:absolute;border:2px dashed var(--accent);background:rgba(255,107,53,0.15);display:none;pointer-events:none;}
+  .thumb{width:100%;max-height:90px;object-fit:contain;border:1px solid var(--border);border-radius:6px;background:#fafafa;}
+  .slot{border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px;}
+  .slot.filled{border-color:var(--green);}
+  .opt-row{display:flex;gap:6px;align-items:center;margin-bottom:6px;}
+  .opt-row .slot{flex:1;margin-bottom:0;}
+  .beta-badge{background:#fdecec;color:#a51c1f;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:800;}
+</style>
+</head>
+<body>
+  <div class="topnav">
+    <div class="brand">PDF → Test Importer <span class="beta-badge">BETA · standalone tool</span></div>
+    <div class="nav-actions">
+      <a href="dashboard.html" class="btn btn-outline btn-sm">← Back to Admin Panel</a>
+    </div>
+  </div>
+
+  <div class="container" style="max-width:1400px;">
+    <div class="shadow-card mt-16" style="margin-bottom:16px;">
+      <div class="grid grid-3">
+        <div class="field" style="margin-bottom:0;">
+          <label>Test Name</label>
+          <input id="test-name-input" type="text" placeholder="e.g. IAT Part Test 2">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Duration (minutes)</label>
+          <input id="test-duration-input" type="number" value="180">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Upload PDF</label>
+          <input id="pdf-file" type="file" accept="application/pdf">
+        </div>
+      </div>
+    </div>
+
+    <div class="layout">
+      <!-- LEFT: PDF viewer + crop -->
+      <div>
+        <div class="shadow-card" style="margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+            <div>
+              <button class="btn btn-outline btn-sm" id="prev-page-btn">← Prev</button>
+              Page <span id="page-num">–</span> / <span id="page-total">–</span>
+              <button class="btn btn-outline btn-sm" id="next-page-btn">Next →</button>
+            </div>
+            <div class="muted" style="font-size:12.5px;">Drag a box on the page below, then click a "Set as..." button on the right.</div>
+          </div>
+        </div>
+        <div id="canvas-wrap">
+          <canvas id="pdf-canvas"></canvas>
+          <div id="crop-box"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT: current question builder -->
+      <div>
+        <div class="shadow-card" style="margin-bottom:14px;">
+          <label>Section</label>
+          <div style="display:flex;gap:8px;">
+            <select id="active-section-select" style="flex:1;"></select>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <input id="new-section-name" type="text" placeholder="New section name">
+            <button class="btn btn-outline btn-sm" id="add-section-btn">Add</button>
+          </div>
+        </div>
+
+        <div class="shadow-card">
+          <b>Building Question</b>
+          <div class="slot mt-16" id="q-slot">
+            <div class="muted" style="font-size:12px;">Question Image</div>
+            <img class="thumb" id="q-thumb" style="display:none;">
+            <button class="btn btn-outline btn-sm btn-block mt-8" id="set-q-btn">Set as Question Image</button>
+          </div>
+
+          <div class="slot" id="sol-slot">
+            <div class="muted" style="font-size:12px;">Solution Image (optional)</div>
+            <img class="thumb" id="sol-thumb" style="display:none;">
+            <button class="btn btn-outline btn-sm btn-block mt-8" id="set-sol-btn">Set as Solution Image</button>
+          </div>
+
+          <div class="muted" style="font-size:12px;margin:14px 0 6px;">Options — tick the correct one</div>
+          <div class="opt-row" data-idx="0">
+            <input type="radio" name="correct-opt" value="0">
+            <div class="slot" style="flex:1;"><img class="thumb" style="display:none;"><button class="btn btn-outline btn-sm btn-block mt-8" data-set-opt="0">Set as Option A</button></div>
+          </div>
+          <div class="opt-row" data-idx="1">
+            <input type="radio" name="correct-opt" value="1">
+            <div class="slot" style="flex:1;"><img class="thumb" style="display:none;"><button class="btn btn-outline btn-sm btn-block mt-8" data-set-opt="1">Set as Option B</button></div>
+          </div>
+          <div class="opt-row" data-idx="2">
+            <input type="radio" name="correct-opt" value="2">
+            <div class="slot" style="flex:1;"><img class="thumb" style="display:none;"><button class="btn btn-outline btn-sm btn-block mt-8" data-set-opt="2">Set as Option C</button></div>
+          </div>
+          <div class="opt-row" data-idx="3">
+            <input type="radio" name="correct-opt" value="3">
+            <div class="slot" style="flex:1;"><img class="thumb" style="display:none;"><button class="btn btn-outline btn-sm btn-block mt-8" data-set-opt="3">Set as Option D</button></div>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:12px;">
+            <label style="margin:0;flex:1;">+ Marks<input type="number" id="q-pos" value="4" step="0.5"></label>
+            <label style="margin:0;flex:1;">− Marks<input type="number" id="q-neg" value="1" step="0.5"></label>
+          </div>
+
+          <button class="btn btn-primary btn-block mt-16" id="save-q-btn">✓ Save Question & Start Next</button>
+          <div id="q-msg" class="mt-8"></div>
+        </div>
+
+        <div class="shadow-card mt-16">
+          <b>Built so far</b>
+          <div id="progress-summary" class="mt-8 muted">No sections yet.</div>
+          <button class="btn btn-primary btn-block mt-16" id="create-test-btn">🚀 Create Test in Database</button>
+          <div id="create-msg" class="mt-8"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../config.js"></script>
+<script src="../lib/supabaseClient.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js';
+
+(async () => {
+  const profile = await requireAdmin('../login.html');
+  if(!profile) return;
+})();
+
+// ===================== PDF VIEW + CROP =====================
+let pdfDoc = null, currentPage = 1;
+let dragging = false, dragStart = null, dragRect = null;
+
+document.getElementById('pdf-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const buf = await file.arrayBuffer();
+  pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+  currentPage = 1;
+  document.getElementById('page-total').textContent = pdfDoc.numPages;
+  renderPage();
+});
+
+async function renderPage(){
+  if(!pdfDoc) return;
+  const page = await pdfDoc.getPage(currentPage);
+  const viewport = page.getViewport({ scale: 1.6 });
+  const canvas = document.getElementById('pdf-canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  document.getElementById('page-num').textContent = currentPage;
+  document.getElementById('crop-box').style.display = 'none';
+  dragRect = null;
+}
+document.getElementById('prev-page-btn').addEventListener('click', () => { if(pdfDoc && currentPage>1){ currentPage--; renderPage(); } });
+document.getElementById('next-page-btn').addEventListener('click', () => { if(pdfDoc && currentPage<pdfDoc.numPages){ currentPage++; renderPage(); } });
+
+const canvasEl = document.getElementById('pdf-canvas');
+const cropBox = document.getElementById('crop-box');
+canvasEl.addEventListener('mousedown', e => {
+  const r = canvasEl.getBoundingClientRect();
+  dragStart = { x: e.clientX - r.left, y: e.clientY - r.top };
+  dragging = true;
+  cropBox.style.left = dragStart.x+'px'; cropBox.style.top = dragStart.y+'px';
+  cropBox.style.width = '0px'; cropBox.style.height = '0px';
+  cropBox.style.display = 'block';
+});
+canvasEl.addEventListener('mousemove', e => {
+  if(!dragging) return;
+  const r = canvasEl.getBoundingClientRect();
+  const cx = e.clientX - r.left, cy = e.clientY - r.top;
+  const x = Math.min(dragStart.x, cx), y = Math.min(dragStart.y, cy);
+  const w = Math.abs(cx - dragStart.x), h = Math.abs(cy - dragStart.y);
+  cropBox.style.left = x+'px'; cropBox.style.top = y+'px';
+  cropBox.style.width = w+'px'; cropBox.style.height = h+'px';
+  dragRect = { x, y, w, h };
+});
+window.addEventListener('mouseup', () => { dragging = false; });
+
+function getCroppedBlob(){
+  return new Promise(resolve => {
+    if(!dragRect || dragRect.w < 5 || dragRect.h < 5){ alert('Draw a box on the page first (click and drag).'); resolve(null); return; }
+    const out = document.createElement('canvas');
+    out.width = Math.round(dragRect.w); out.height = Math.round(dragRect.h);
+    out.getContext('2d').drawImage(canvasEl, dragRect.x, dragRect.y, dragRect.w, dragRect.h, 0, 0, dragRect.w, dragRect.h);
+    out.toBlob(resolve, 'image/png');
+  });
+}
+
+// ===================== QUESTION BUILDER =====================
+let curQ = { imgBlob:null, solBlob:null, options:[null,null,null,null], correctIdx:null };
+let builtSections = [];
+let activeSectionIdx = -1;
+
+function updateThumb(imgEl, blob){
+  if(!blob){ imgEl.style.display='none'; return; }
+  imgEl.src = URL.createObjectURL(blob);
+  imgEl.style.display='block';
+}
+function clearCropBox(){ cropBox.style.display='none'; dragRect=null; }
+
+document.getElementById('set-q-btn').addEventListener('click', async () => {
+  const blob = await getCroppedBlob(); if(!blob) return;
+  curQ.imgBlob = blob;
+  updateThumb(document.getElementById('q-thumb'), blob);
+  document.getElementById('q-slot').classList.add('filled');
+  clearCropBox();
+});
+document.getElementById('set-sol-btn').addEventListener('click', async () => {
+  const blob = await getCroppedBlob(); if(!blob) return;
+  curQ.solBlob = blob;
+  updateThumb(document.getElementById('sol-thumb'), blob);
+  document.getElementById('sol-slot').classList.add('filled');
+  clearCropBox();
+});
+document.querySelectorAll('[data-set-opt]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const idx = parseInt(btn.dataset.setOpt);
+    const blob = await getCroppedBlob(); if(!blob) return;
+    curQ.options[idx] = blob;
+    const row = document.querySelector(`.opt-row[data-idx="${idx}"]`);
+    updateThumb(row.querySelector('img'), blob);
+    row.querySelector('.slot').classList.add('filled');
+    clearCropBox();
+  });
+});
+
+function resetCurQ(){
+  curQ = { imgBlob:null, solBlob:null, options:[null,null,null,null], correctIdx:null };
+  document.getElementById('q-thumb').style.display='none';
+  document.getElementById('sol-thumb').style.display='none';
+  document.getElementById('q-slot').classList.remove('filled');
+  document.getElementById('sol-slot').classList.remove('filled');
+  document.querySelectorAll('.opt-row').forEach(row => {
+    row.querySelector('img').style.display='none';
+    row.querySelector('.slot').classList.remove('filled');
+    row.querySelector('input[type=radio]').checked = false;
+  });
+  document.getElementById('q-pos').value = 4;
+  document.getElementById('q-neg').value = 1;
+}
+
+document.getElementById('add-section-btn').addEventListener('click', () => {
+  const name = document.getElementById('new-section-name').value.trim();
+  if(!name) return;
+  builtSections.push({ name, questions: [] });
+  activeSectionIdx = builtSections.length - 1;
+  document.getElementById('new-section-name').value = '';
+  refreshSectionSelect();
+  refreshProgress();
+});
+function refreshSectionSelect(){
+  const sel = document.getElementById('active-section-select');
+  sel.innerHTML = builtSections.map((s,i) => `<option value="${i}" ${i===activeSectionIdx?'selected':''}>${s.name} (${s.questions.length} Q)</option>`).join('');
+}
+document.getElementById('active-section-select').addEventListener('change', (e) => {
+  activeSectionIdx = parseInt(e.target.value);
+});
+
+document.getElementById('save-q-btn').addEventListener('click', () => {
+  const msg = document.getElementById('q-msg');
+  if(activeSectionIdx < 0){ msg.innerHTML = '<div class="error-msg">Add/select a section first.</div>'; return; }
+  if(!curQ.imgBlob){ msg.innerHTML = '<div class="error-msg">Set the question image first.</div>'; return; }
+  const filledOpts = curQ.options.filter(Boolean).length;
+  if(filledOpts < 2){ msg.innerHTML = '<div class="error-msg">Add at least 2 options.</div>'; return; }
+  const correctChecked = document.querySelector('input[name="correct-opt"]:checked');
+  if(!correctChecked){ msg.innerHTML = '<div class="error-msg">Select the correct option.</div>'; return; }
+  curQ.correctIdx = parseInt(correctChecked.value);
+  curQ.pos = parseFloat(document.getElementById('q-pos').value) || 4;
+  curQ.neg = parseFloat(document.getElementById('q-neg').value) || 1;
+
+  builtSections[activeSectionIdx].questions.push(curQ);
+  msg.innerHTML = '<div class="success-msg">Question added.</div>';
+  resetCurQ();
+  refreshSectionSelect();
+  refreshProgress();
+});
+
+function refreshProgress(){
+  const wrap = document.getElementById('progress-summary');
+  if(!builtSections.length){ wrap.innerHTML = 'No sections yet.'; return; }
+  const totalQ = builtSections.reduce((n,s) => n+s.questions.length, 0);
+  wrap.innerHTML = builtSections.map(s => `${s.name}: <b>${s.questions.length}</b> questions`).join('<br>') +
+    `<br><br>Total: <b>${totalQ}</b> questions across ${builtSections.length} section(s).`;
+}
+
+// ===================== SAVE TO DATABASE =====================
+async function uploadBlob(testId, blob, tag){
+  const path = `${testId}/${tag}_${Date.now()}_${Math.random().toString(36).slice(2,8)}.png`;
+  const { error } = await supabaseClient.storage.from('test-images').upload(path, blob, { contentType:'image/png' });
+  if(error) throw error;
+  const { data } = supabaseClient.storage.from('test-images').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+document.getElementById('create-test-btn').addEventListener('click', async () => {
+  const msg = document.getElementById('create-msg');
+  const name = document.getElementById('test-name-input').value.trim();
+  if(!name){ msg.innerHTML = '<div class="error-msg">Enter a test name at the top.</div>'; return; }
+  const totalQ = builtSections.reduce((n,s) => n+s.questions.length, 0);
+  if(totalQ === 0){ msg.innerHTML = '<div class="error-msg">No questions built yet.</div>'; return; }
+
+  const btn = document.getElementById('create-test-btn');
+  btn.disabled = true;
+  const durationMin = parseInt(document.getElementById('test-duration-input').value) || 180;
+
+  try {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    const { data: testRow, error: tErr } = await supabaseClient
+      .from('tests').insert({ name, duration_ms: durationMin*60000, is_active:false, created_by: user.id })
+      .select().single();
+    if(tErr) throw tErr;
+
+    let secOrder = 1, done = 0;
+    for(const sec of builtSections){
+      const marks = sec.questions.reduce((s,q) => s+q.pos, 0);
+      const { data: secRow, error: sErr } = await supabaseClient
+        .from('sections').insert({ test_id: testRow.id, name: sec.name, order_no: secOrder++, section_marks: marks })
+        .select().single();
+      if(sErr) throw sErr;
+
+      let qOrder = 1;
+      for(const q of sec.questions){
+        msg.innerHTML = `<div class="muted">Uploading... (${++done}/${totalQ})</div>`;
+        const qImgUrl = await uploadBlob(testRow.id, q.imgBlob, 'q');
+        const solImgUrl = q.solBlob ? await uploadBlob(testRow.id, q.solBlob, 'sol') : null;
+        const { data: qRow, error: qErr } = await supabaseClient
+          .from('questions').insert({
+            section_id: secRow.id, image_url: qImgUrl, solution_image_url: solImgUrl,
+            order_no: qOrder++, positive_marks: q.pos, negative_marks: q.neg
+          }).select().single();
+        if(qErr) throw qErr;
+
+        let optOrder = 1;
+        for(let i=0; i<4; i++){
+          if(!q.options[i]) continue;
+          const optUrl = await uploadBlob(testRow.id, q.options[i], 'opt');
+          const { error: oErr } = await supabaseClient.from('options').insert({
+            question_id: qRow.id, label: String.fromCharCode(65+i), image_url: optUrl,
+            is_correct: q.correctIdx === i, order_no: optOrder++
+          });
+          if(oErr) throw oErr;
+        }
+      }
+    }
+    msg.innerHTML = `<div class="success-msg">✅ Test created (inactive by default). Go to Manage Tests to activate it when ready.</div>`;
+    builtSections = []; activeSectionIdx = -1;
+    refreshSectionSelect(); refreshProgress(); resetCurQ();
+  } catch(err){
+    msg.innerHTML = `<div class="error-msg">${err.message}</div>`;
+  }
+  btn.disabled = false;
+});
+</script>
+</body>
+</html>

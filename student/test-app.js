@@ -17,11 +17,22 @@ let questionEnterTs = 0;
 
 const params = new URLSearchParams(window.location.search);
 const testId = params.get('test_id');
+const reviewResultId = params.get('review');
 
 (async () => {
   const session = await requireLogin();
   if(!session) return;
   profile = await getCurrentProfile();
+
+  if(reviewResultId){
+    try {
+      await loadReviewMode(reviewResultId);
+    } catch(err){
+      console.error(err);
+      document.getElementById('loading-text').textContent = 'Failed to load result: ' + err.message;
+    }
+    return;
+  }
 
   // Check once, before starting — an active timed exam is never interrupted mid-way by maintenance mode.
   if(await isMaintenanceOn(profile)){
@@ -41,6 +52,56 @@ const testId = params.get('test_id');
   }
 })();
 
+async function loadReviewMode(resultId){
+  document.getElementById('loading-text').textContent = 'Loading your result...';
+  const { data: result, error } = await supabaseClient
+    .from('results').select('*, tests(*)').eq('id', resultId).single();
+  if(error) throw error;
+  testRow = result.tests;
+
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('result').style.display = 'block';
+  document.getElementById('result-title').textContent = testRow.name + ' — Result';
+
+  if(!testRow.solutions_released){
+    document.getElementById('btn-download-report').style.display = 'none';
+    document.getElementById('result-sub').textContent = 'Score is in — solutions are locked for now.';
+    document.getElementById('result-score').textContent = `${result.total_score}`;
+    document.getElementById('summary-cards').innerHTML = `
+      <div class="summary-card"><div class="val" style="color:var(--green-dark)">${result.total_correct}</div><div class="lbl">Correct</div></div>
+      <div class="summary-card"><div class="val" style="color:#c0292c">${result.total_incorrect}</div><div class="lbl">Incorrect</div></div>
+      <div class="summary-card"><div class="val" style="color:var(--gray)">${result.total_unattempted}</div><div class="lbl">Unattempted</div></div>
+      <div class="summary-card"><div class="val" style="color:var(--primary-dark)">${fmtHMS(result.time_taken_ms)}</div><div class="lbl">Time Taken</div></div>
+    `;
+    document.getElementById('section-table-body').innerHTML = '';
+    document.getElementById('review-tabs').style.display = 'none';
+    document.getElementById('review-container').innerHTML =
+      `<div class="shadow-card center muted" style="padding:36px;">🔒 Solutions & correct answers haven't been released for this test yet.<br>Check back later on "My Results".</div>`;
+    return;
+  }
+
+  // solutions released — load section/question order so the review can render fully
+  const { data: secRows } = await supabaseClient.from('sections').select('*').eq('test_id', testRow.id).order('order_no');
+  const sectionIds = secRows.map(s => s.id);
+  const { data: qRows } = await supabaseClient.from('questions_for_student').select('*').in('section_id', sectionIds).order('order_no');
+  const questionIds = qRows.map(q => q.id);
+  let optRows = [];
+  if(questionIds.length){
+    const { data: oRows } = await supabaseClient.from('options_for_student').select('*').in('question_id', questionIds).order('order_no');
+    optRows = oRows;
+  }
+  sections = secRows.map(sec => ({
+    id: sec.id, name: sec.name, marks: sec.section_marks,
+    questions: qRows.filter(q => q.section_id === sec.id).map(q => ({
+      id: q.id, img: q.image_url, text: q.text_content, pos: q.positive_marks, neg: q.negative_marks,
+      options: optRows.filter(o => o.question_id === q.id).map(o => ({ id: o.id, label: o.label, img: o.image_url, text: o.text_content }))
+    }))
+  }));
+  totalMarksPossible = sections.reduce((n,s) => n + s.questions.reduce((m,q) => m+q.pos, 0), 0);
+
+  renderResult(result, false);
+}
+
 async function loadTestData(){
   document.getElementById('loading-text').textContent = 'Fetching test details...';
   const { data: test, error: testErr } = await supabaseClient
@@ -49,6 +110,16 @@ async function loadTestData(){
   testRow = test;
   totalDuration = test.duration_ms;
   remainingMs = totalDuration;
+
+  if(test.max_attempts){
+    const { count, error: cntErr } = await supabaseClient
+      .from('results').select('id', { count: 'exact', head: true })
+      .eq('user_id', profile.id).eq('test_id', testId);
+    if(cntErr) throw cntErr;
+    if(count >= test.max_attempts){
+      throw new Error(`You've already used all ${test.max_attempts} attempt(s) allowed for this test.`);
+    }
+  }
 
   document.getElementById('loading-text').textContent = 'Loading sections...';
   const { data: secRows, error: secErr } = await supabaseClient
@@ -488,6 +559,7 @@ document.getElementById('btn-download-report').addEventListener('click', downloa
 
 function renderResult(data, auto){
   lastResultData = data;
+  document.getElementById('btn-download-report').style.display = testRow.solutions_released ? '' : 'none';
   let subText = auto
     ? "Time's up — your test was auto-submitted."
     : "Here's how you performed.";
@@ -532,15 +604,22 @@ function renderResult(data, auto){
   `).join('');
 
   const tabsWrap = document.getElementById('review-tabs');
-  tabsWrap.innerHTML = sections.map((s,i)=>`<button class="review-tab ${i===0?'active':''}" data-idx="${i}">${s.name}</button>`).join('');
-  tabsWrap.querySelectorAll('.review-tab').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      tabsWrap.querySelectorAll('.review-tab').forEach(b=>b.classList.remove('active'));
-      btn.classList.add('active');
-      renderReviewSection(parseInt(btn.getAttribute('data-idx')), detailByQ);
+  if(testRow.solutions_released){
+    tabsWrap.style.display = '';
+    tabsWrap.innerHTML = sections.map((s,i)=>`<button class="review-tab ${i===0?'active':''}" data-idx="${i}">${s.name}</button>`).join('');
+    tabsWrap.querySelectorAll('.review-tab').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        tabsWrap.querySelectorAll('.review-tab').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        renderReviewSection(parseInt(btn.getAttribute('data-idx')), detailByQ);
+      });
     });
-  });
-  renderReviewSection(0, detailByQ);
+    renderReviewSection(0, detailByQ);
+  } else {
+    tabsWrap.style.display = 'none';
+    document.getElementById('review-container').innerHTML =
+      `<div class="shadow-card center muted" style="padding:36px;">🔒 Solutions & correct answers haven't been released yet.<br>Your instructor will release them soon — check "My Results" later.</div>`;
+  }
 }
 
 function renderReviewSection(si, detailByQ){
