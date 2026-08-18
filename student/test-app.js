@@ -11,7 +11,8 @@ let answers = [];
 let totalMarksPossible = 0;
 let tabSwitchCount = 0;
 let fullscreenExitCount = 0;
-const MAX_FULLSCREEN_EXITS = 3;
+let violationCount = 0; // combined: tab switches + fullscreen exits together
+const MAX_VIOLATIONS = 3;
 let questionTimerInterval = null;
 let questionEnterTs = 0;
 
@@ -222,8 +223,12 @@ function setupAntiCheat(){
     if(submitted) return;
     if(document.visibilityState === 'hidden'){
       tabSwitchCount++;
+      violationCount++;
       const banner = document.getElementById('tab-warning-banner');
       banner.textContent = `⚠ Tab switch detected (${tabSwitchCount})! Stay on this page — this is being recorded.`;
+      if(violationCount >= MAX_VIOLATIONS){
+        finishSubmit(false, 'violation');
+      }
     }
   });
   window.addEventListener('focus', () => {
@@ -232,6 +237,9 @@ function setupAntiCheat(){
       const banner = document.getElementById('tab-warning-banner');
       banner.classList.add('show');
       setTimeout(()=>banner.classList.remove('show'), 4000);
+      if(violationCount < MAX_VIOLATIONS){
+        showViolationWarning();
+      }
     }
   });
 
@@ -250,22 +258,27 @@ function onFullscreenChange(){
   if(submitted) return;
   if(!isFullscreen()){
     fullscreenExitCount++;
-    if(fullscreenExitCount >= MAX_FULLSCREEN_EXITS){
-      finishSubmit(false, 'fullscreen');
+    violationCount++;
+    if(violationCount >= MAX_VIOLATIONS){
+      finishSubmit(false, 'violation');
       return;
     }
-    const modal = document.getElementById('violation-modal');
-    const title = document.getElementById('violation-title');
-    const text = document.getElementById('violation-text');
-    if(fullscreenExitCount === 1){
-      title.textContent = '⚠ Warning 1/3 — Fullscreen Exited';
-      text.textContent = "You must stay in fullscreen during the test. Exiting 3 times will auto-submit your test.";
-    } else if(fullscreenExitCount === 2){
-      title.textContent = '🚨 Warning 2/3 — Final Warning';
-      text.textContent = "One more exit and your test will be auto-submitted immediately!";
-    }
-    modal.classList.add('show');
+    showViolationWarning();
   }
+}
+
+function showViolationWarning(){
+  const modal = document.getElementById('violation-modal');
+  const title = document.getElementById('violation-title');
+  const text = document.getElementById('violation-text');
+  if(violationCount === 1){
+    title.textContent = '⚠ Warning 1/3';
+    text.textContent = "Stay on this page and in fullscreen during the test. Switching tabs or exiting fullscreen 3 times (combined) will auto-submit your test.";
+  } else if(violationCount === 2){
+    title.textContent = '🚨 Warning 2/3 — Final Warning';
+    text.textContent = "One more tab switch or fullscreen exit and your test will be auto-submitted immediately!";
+  }
+  modal.classList.add('show');
 }
 
 // ===================== TIMER =====================
@@ -509,8 +522,8 @@ async function finishSubmit(auto, reason){
   document.getElementById('tab-warning-banner').classList.remove('show');
   document.getElementById('exam').style.display='none';
   document.getElementById('loading-screen').style.display='flex';
-  document.getElementById('loading-text').textContent = reason==='fullscreen'
-    ? 'Too many fullscreen exits — auto-submitting your test...'
+  document.getElementById('loading-text').textContent = reason==='violation'
+    ? 'Too many tab-switch/fullscreen violations — auto-submitting your test...'
     : 'Submitting your answers...';
 
   // Build the answers payload { question_id: chosen_option_id }
@@ -542,7 +555,7 @@ async function finishSubmit(auto, reason){
   }
 
   document.getElementById('result').style.display='block';
-  renderResult(data, auto || reason==='fullscreen');
+  renderResult(data, auto || reason==='violation');
   window.scrollTo(0,0);
 }
 
@@ -563,8 +576,8 @@ function renderResult(data, auto){
   let subText = auto
     ? "Time's up — your test was auto-submitted."
     : "Here's how you performed.";
-  if(fullscreenExitCount >= MAX_FULLSCREEN_EXITS){
-    subText = "Your test was auto-submitted after repeated fullscreen exits.";
+  if(violationCount >= MAX_VIOLATIONS){
+    subText = "Your test was auto-submitted after repeated tab-switch/fullscreen violations.";
   }
   document.getElementById('result-sub').textContent = subText;
   document.getElementById('result-score').textContent = `${data.total_score} / ${totalMarksPossible}`;
