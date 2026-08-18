@@ -196,7 +196,7 @@ function getCroppedBlob(){
     const out = document.createElement('canvas');
     out.width = Math.round(dragRect.w); out.height = Math.round(dragRect.h);
     out.getContext('2d').drawImage(canvasEl, dragRect.x, dragRect.y, dragRect.w, dragRect.h, 0, 0, dragRect.w, dragRect.h);
-    out.toBlob(resolve, 'image/png');
+    out.toBlob(resolve, 'image/jpeg', 0.75);
   });
 }
 
@@ -299,8 +299,8 @@ function refreshProgress(){
 
 // ===================== SAVE TO DATABASE =====================
 async function uploadBlob(testId, blob, tag){
-  const path = `${testId}/${tag}_${Date.now()}_${Math.random().toString(36).slice(2,8)}.png`;
-  const { error } = await supabaseClient.storage.from('test-images').upload(path, blob, { contentType:'image/png' });
+  const path = `${testId}/${tag}_${Date.now()}_${Math.random().toString(36).slice(2,8)}.jpg`;
+  const { error } = await supabaseClient.storage.from('test-images').upload(path, blob, { contentType:'image/jpeg' });
   if(error) throw error;
   const { data } = supabaseClient.storage.from('test-images').getPublicUrl(path);
   return data.publicUrl;
