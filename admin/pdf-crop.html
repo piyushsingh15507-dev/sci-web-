@@ -274,10 +274,10 @@ document.getElementById('save-q-btn').addEventListener('click', () => {
   const msg = document.getElementById('q-msg');
   if(activeSectionIdx < 0){ msg.innerHTML = '<div class="error-msg">Add/select a section first.</div>'; return; }
   if(!curQ.imgBlob){ msg.innerHTML = '<div class="error-msg">Set the question image first.</div>'; return; }
-  const filledOpts = curQ.options.filter(Boolean).length;
-  if(filledOpts < 2){ msg.innerHTML = '<div class="error-msg">Add at least 2 options.</div>'; return; }
+  // Options are optional — if the question image already shows all options (A/B/C/D) baked in,
+  // you can skip cropping them separately and just mark the correct letter below.
   const correctChecked = document.querySelector('input[name="correct-opt"]:checked');
-  if(!correctChecked){ msg.innerHTML = '<div class="error-msg">Select the correct option.</div>'; return; }
+  if(!correctChecked){ msg.innerHTML = '<div class="error-msg">Select the correct option (A/B/C/D).</div>'; return; }
   curQ.correctIdx = parseInt(correctChecked.value);
   curQ.pos = parseFloat(document.getElementById('q-pos').value) || 4;
   curQ.neg = parseFloat(document.getElementById('q-neg').value) || 1;
@@ -346,8 +346,7 @@ document.getElementById('create-test-btn').addEventListener('click', async () =>
 
         let optOrder = 1;
         for(let i=0; i<4; i++){
-          if(!q.options[i]) continue;
-          const optUrl = await uploadBlob(testRow.id, q.options[i], 'opt');
+          const optUrl = q.options[i] ? await uploadBlob(testRow.id, q.options[i], 'opt') : null;
           const { error: oErr } = await supabaseClient.from('options').insert({
             question_id: qRow.id, label: String.fromCharCode(65+i), image_url: optUrl,
             is_correct: q.correctIdx === i, order_no: optOrder++
