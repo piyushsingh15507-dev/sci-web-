@@ -402,17 +402,35 @@ function parseRawTestJson(raw){
   };
 }
 
+// Compresses any image blob to JPEG (quality 0.75) via canvas — keeps storage usage low
+// since Classplus source images are often large PNGs.
+function compressToJpeg(blob, quality=0.75){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(resolve, 'image/jpeg', quality);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(blob);
+  });
+}
+
 async function mirrorImageToStorage(testId, url, tag){
   if(!url) return { url: null, mirrored: false };
   try {
     const resp = await fetch(url);
     if(!resp.ok) throw new Error('fetch failed: ' + resp.status);
-    const blob = await resp.blob();
-    let ext = (url.split('.').pop() || 'png').split('?')[0];
-    if(!ext || ext.length > 5) ext = 'png';
-    const path = `${testId}/${tag}_${uid()}.${ext}`;
+    const rawBlob = await resp.blob();
+    const blob = await compressToJpeg(rawBlob);
+    const path = `${testId}/${tag}_${uid()}.jpg`;
     const { error } = await supabaseClient.storage.from('test-images')
-      .upload(path, blob, { contentType: blob.type || 'image/png' });
+      .upload(path, blob, { contentType: 'image/jpeg' });
     if(error) throw error;
     const { data } = supabaseClient.storage.from('test-images').getPublicUrl(path);
     return { url: data.publicUrl, mirrored: true };
@@ -423,7 +441,7 @@ async function mirrorImageToStorage(testId, url, tag){
 
 // Some questions have MULTIPLE <img> tags (e.g. a diagram + a data table as two images).
 // Since each question/option only has one image_url column, we stitch all images for that
-// question vertically into a single combined PNG, so both parts show together as intended.
+// question vertically into a single combined JPEG, so both parts show together as intended.
 function stitchImagesVertically(blobs){
   return Promise.all(blobs.map(b => new Promise((resolve, reject) => {
     const img = new Image();
@@ -445,7 +463,7 @@ function stitchImagesVertically(blobs){
       ctx.drawImage(img, x, y);
       y += img.naturalHeight + gap;
     }
-    return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.75));
   });
 }
 
@@ -460,9 +478,9 @@ async function mirrorMultiImagesStacked(testId, urls, tag){
       blobs.push(await resp.blob());
     }
     const stitched = await stitchImagesVertically(blobs);
-    const path = `${testId}/${tag}_${uid()}.png`;
+    const path = `${testId}/${tag}_${uid()}.jpg`;
     const { error } = await supabaseClient.storage.from('test-images')
-      .upload(path, stitched, { contentType: 'image/png' });
+      .upload(path, stitched, { contentType: 'image/jpeg' });
     if(error) throw error;
     const { data } = supabaseClient.storage.from('test-images').getPublicUrl(path);
     return { url: data.publicUrl, mirrored: true };
