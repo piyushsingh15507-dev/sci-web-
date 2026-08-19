@@ -112,6 +112,14 @@ async function loadTestData(){
   totalDuration = test.duration_ms;
   remainingMs = totalDuration;
 
+  const now = new Date();
+  if(test.opens_at && now < new Date(test.opens_at)){
+    throw new Error(`This test opens on ${new Date(test.opens_at).toLocaleString()}. Please come back then.`);
+  }
+  if(test.closes_at && now > new Date(test.closes_at)){
+    throw new Error(`This test closed on ${new Date(test.closes_at).toLocaleString()} and can no longer be attempted.`);
+  }
+
   if(test.max_attempts){
     const { count, error: cntErr } = await supabaseClient
       .from('results').select('id', { count: 'exact', head: true })
