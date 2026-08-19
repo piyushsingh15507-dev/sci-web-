@@ -776,6 +776,8 @@ async function editTest(testId){
   const { data: test } = await supabaseClient.from('tests').select('*').eq('id', testId).single();
   document.getElementById('edit-test-name').value = test.name;
   document.getElementById('edit-max-attempts').value = test.max_attempts || '';
+  document.getElementById('edit-opens-at').value = toDatetimeLocal(test.opens_at);
+  document.getElementById('edit-closes-at').value = toDatetimeLocal(test.closes_at);
 
   const { data: sections } = await supabaseClient.from('sections').select('*').eq('test_id', testId).order('order_no');
   for(const sec of sections){
@@ -799,6 +801,29 @@ function renderSolutionsToggleBtn(){
     btn.className = 'btn btn-block btn-primary';
   }
 }
+
+// Converts a stored UTC timestamptz string into the local "YYYY-MM-DDTHH:mm" format
+// that <input type="datetime-local"> expects.
+function toDatetimeLocal(isoString){
+  if(!isoString) return '';
+  const d = new Date(isoString);
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+document.getElementById('edit-save-window-btn').addEventListener('click', async () => {
+  const msg = document.getElementById('edit-window-msg');
+  const opensVal = document.getElementById('edit-opens-at').value;
+  const closesVal = document.getElementById('edit-closes-at').value;
+  const opens_at = opensVal ? new Date(opensVal).toISOString() : null;
+  const closes_at = closesVal ? new Date(closesVal).toISOString() : null;
+  if(opens_at && closes_at && opens_at >= closes_at){
+    msg.innerHTML = '<div class="error-msg">Opens At must be before Closes At.</div>';
+    return;
+  }
+  const { error } = await supabaseClient.from('tests').update({ opens_at, closes_at }).eq('id', editState.testId);
+  msg.innerHTML = error ? `<div class="error-msg">${error.message}</div>` : '<div class="success-msg">Test window saved.</div>';
+});
 
 document.getElementById('edit-max-attempts').addEventListener('change', async () => {
   const val = document.getElementById('edit-max-attempts').value.trim();
@@ -974,3 +999,46 @@ function renderEditQuestions(){
     });
   });
 }
+
+// ===================== ANNOUNCEMENTS (Notification Center) =====================
+document.querySelector('.tab-btn[data-tab="announcements"]').addEventListener('click', loadAnnouncements);
+
+async function loadAnnouncements(){
+  const listEl = document.getElementById('announcements-list');
+  const { data, error } = await supabaseClient.from('announcements').select('*').order('created_at', { ascending:false });
+  if(error){ listEl.innerHTML = `<p class="error-msg">${error.message}</p>`; return; }
+  if(!data || !data.length){ listEl.innerHTML = '<p class="muted">No announcements posted yet.</p>'; return; }
+  listEl.innerHTML = data.map(a => `
+    <div class="card mt-8" style="padding:12px;" data-aid="${a.id}">
+      <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;">
+        <div>
+          <b>${a.title}</b>
+          <div class="muted" style="font-size:11px;margin:2px 0 6px;">${new Date(a.created_at).toLocaleString()}</div>
+          <div style="font-size:13.5px;white-space:pre-wrap;">${a.message}</div>
+        </div>
+        <button class="btn btn-danger btn-sm" data-del-announcement="${a.id}">Delete</button>
+      </div>
+    </div>
+  `).join('');
+  listEl.querySelectorAll('[data-del-announcement]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if(!confirm('Delete this announcement?')) return;
+      await supabaseClient.from('announcements').delete().eq('id', btn.dataset.delAnnouncement);
+      loadAnnouncements();
+    });
+  });
+}
+
+document.getElementById('post-announcement-btn').addEventListener('click', async () => {
+  const msg = document.getElementById('announcement-post-msg');
+  const title = document.getElementById('announcement-title').value.trim();
+  const message = document.getElementById('announcement-message').value.trim();
+  if(!title || !message){ msg.innerHTML = '<div class="error-msg">Title and message are both required.</div>'; return; }
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  const { error } = await supabaseClient.from('announcements').insert({ title, message, created_by: user.id });
+  if(error){ msg.innerHTML = `<div class="error-msg">${error.message}</div>`; return; }
+  msg.innerHTML = '<div class="success-msg">Announcement posted — students will see it.</div>';
+  document.getElementById('announcement-title').value = '';
+  document.getElementById('announcement-message').value = '';
+  loadAnnouncements();
+});
