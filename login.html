@@ -198,6 +198,7 @@ loginForm.addEventListener('submit', async (e) => {
   const password = document.getElementById('login-password').value;
 
   const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if(!error){ await supabaseClient.rpc('register_device_session', { p_device_id: getDeviceId() }); }
   btn.disabled = false; btn.textContent = 'Login';
   if(error){ showError(error.message); return; }
   await redirectByRole();
@@ -256,6 +257,7 @@ signupForm.addEventListener('submit', async (e) => {
     showSuccess('Account created! Check your email to confirm, then login.');
     tabLogin.click();
   } else {
+    await supabaseClient.rpc('register_device_session', { p_device_id: getDeviceId() });
     await redirectByRole();
   }
 });
