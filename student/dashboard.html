@@ -75,7 +75,19 @@
     <div class="nav-actions" style="gap:10px;align-items:center;">
       <span class="pill" id="admin-preview-badge" style="display:none;">👁 Admin Preview Mode</span>
       <a href="../admin/dashboard.html" id="admin-preview-link" class="btn btn-outline btn-sm" style="display:none;">Back to Admin Panel</a>
+      <button class="btn btn-outline btn-sm" id="notif-bell-btn" style="position:relative;">🔔<span id="notif-dot" style="display:none;position:absolute;top:2px;right:2px;width:9px;height:9px;background:#e5484d;border-radius:50%;border:1.5px solid #fff;"></span></button>
       <button class="btn btn-outline btn-sm" id="logout-btn">Logout</button>
+    </div>
+  </div>
+
+  <!-- NOTIFICATION OVERLAY -->
+  <div id="notif-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(20,25,50,0.45);align-items:center;justify-content:center;padding:20px;">
+    <div class="shadow-card" style="max-width:480px;width:100%;max-height:80vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <b style="font-size:16px;">📢 Announcements</b>
+        <button class="btn btn-outline btn-sm" id="notif-close-btn">✕ Close</button>
+      </div>
+      <div id="notif-list"><p class="muted">Loading...</p></div>
     </div>
   </div>
 
@@ -203,17 +215,69 @@ async function loadTests(){
     const m = Math.round((t.duration_ms%3600000)/60000);
     const div = document.createElement('div');
     div.className = 'shadow-card test-card';
-    div.innerHTML = `
-      <div class="name">${t.name}</div>
-      <div class="meta">Duration: ${h>0?h+'h ':''}${m}m</div>
-      <button class="btn btn-primary btn-sm" style="align-self:flex-start;">Start Test</button>
-    `;
-    div.querySelector('button').addEventListener('click', () => {
-      window.location.href = `test.html?test_id=${t.id}`;
-    });
+
+    const now = new Date();
+    const opensAt = t.opens_at ? new Date(t.opens_at) : null;
+    const closesAt = t.closes_at ? new Date(t.closes_at) : null;
+    const fmt = (d) => d.toLocaleString(undefined, { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+
+    if(opensAt && now < opensAt){
+      div.innerHTML = `
+        <div class="name">${t.name}</div>
+        <div class="meta">Duration: ${h>0?h+'h ':''}${m}m</div>
+        <div class="badge badge-gray">🔒 Opens on ${fmt(opensAt)}</div>
+      `;
+    } else if(closesAt && now > closesAt){
+      div.innerHTML = `
+        <div class="name">${t.name}</div>
+        <div class="meta">Duration: ${h>0?h+'h ':''}${m}m</div>
+        <div class="badge badge-red">🔒 Closed (was open till ${fmt(closesAt)})</div>
+      `;
+    } else {
+      div.innerHTML = `
+        <div class="name">${t.name}</div>
+        <div class="meta">Duration: ${h>0?h+'h ':''}${m}m</div>
+        ${closesAt ? `<div class="muted" style="font-size:11.5px;">Closes: ${fmt(closesAt)}</div>` : ''}
+        <button class="btn btn-primary btn-sm" style="align-self:flex-start;">Start Test</button>
+      `;
+      div.querySelector('button').addEventListener('click', () => {
+        window.location.href = `test.html?test_id=${t.id}`;
+      });
+    }
     grid.appendChild(div);
   });
 }
+
+// ===================== NOTIFICATION CENTER =====================
+async function checkNotifDot(){
+  const { data } = await supabaseClient.from('announcements').select('created_at').order('created_at', { ascending:false }).limit(1);
+  if(!data || !data.length) return;
+  const lastSeen = localStorage.getItem('last_seen_announcement') || '';
+  document.getElementById('notif-dot').style.display = (data[0].created_at > lastSeen) ? 'block' : 'none';
+}
+
+async function openNotifOverlay(){
+  document.getElementById('notif-overlay').style.display = 'flex';
+  const listEl = document.getElementById('notif-list');
+  const { data, error } = await supabaseClient.from('announcements').select('*').order('created_at', { ascending:false });
+  if(error){ listEl.innerHTML = `<p class="error-msg">${error.message}</p>`; return; }
+  if(!data || !data.length){ listEl.innerHTML = `<p class="muted">No announcements yet.</p>`; return; }
+  listEl.innerHTML = data.map(a => `
+    <div class="card mt-8" style="padding:12px;">
+      <b>${a.title}</b>
+      <div class="muted" style="font-size:11px;margin:2px 0 6px;">${new Date(a.created_at).toLocaleString()}</div>
+      <div style="font-size:13.5px;white-space:pre-wrap;">${a.message}</div>
+    </div>
+  `).join('');
+  if(data[0]) localStorage.setItem('last_seen_announcement', data[0].created_at);
+  document.getElementById('notif-dot').style.display = 'none';
+}
+
+document.getElementById('notif-bell-btn').addEventListener('click', openNotifOverlay);
+document.getElementById('notif-close-btn').addEventListener('click', () => {
+  document.getElementById('notif-overlay').style.display = 'none';
+});
+checkNotifDot();
 
 async function loadResults(){
   const wrap = document.getElementById('results-list');
