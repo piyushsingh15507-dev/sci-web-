@@ -15,6 +15,7 @@ let violationCount = 0; // combined: tab switches + fullscreen exits together
 const MAX_VIOLATIONS = 3;
 let questionTimerInterval = null;
 let questionEnterTs = 0;
+let currentAccessToken = null; // captured for the reliable exit-time submit (back button / tab close)
 
 const params = new URLSearchParams(window.location.search);
 const testId = params.get('test_id');
@@ -23,6 +24,7 @@ const reviewResultId = params.get('review');
 (async () => {
   const session = await requireLogin();
   if(!session) return;
+  currentAccessToken = session.access_token;
   profile = await getCurrentProfile();
 
   if(reviewResultId){
@@ -785,3 +787,43 @@ function downloadReportPdf(){
   const safeTestName = testRow.name.replace(/[^a-z0-9]+/gi, '_');
   doc.save(`${safeTestName}_Report.pdf`);
 }
+
+// ===================== EXIT-TIME AUTO-SUBMIT (back button / tab close / browser close) =====================
+// A normal supabaseClient.rpc() call can get cancelled mid-flight when the page unloads.
+// keepalive:true tells the browser to let this specific request finish even after the page is gone —
+// this is the standard, reliable way to send a request exactly at page-exit time.
+window.addEventListener('pagehide', () => {
+  if(submitted) return;                                    // already submitted normally — nothing to do
+  if(!document.body.classList.contains('exam-active')) return; // no active exam on screen — nothing to do
+  if(!testRow || !sections.length || !currentAccessToken) return;
+
+  submitted = true; // prevents any other submit path from double-firing
+
+  try {
+    const payload = {};
+    sections.forEach((sec, si) => sec.questions.forEach((q, qi) => {
+      const st = answers[si] && answers[si][qi];
+      if(st && st.selectedOptId) payload[q.id] = st.selectedOptId;
+    }));
+    const timeUsedMs = totalDuration - remainingMs;
+
+    fetch(`${SUPABASE_URL}/rest/v1/rpc/submit_attempt`, {
+      method: 'POST',
+      keepalive: true,
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${currentAccessToken}`
+      },
+      body: JSON.stringify({
+        p_test_id: testId,
+        p_answers: payload,
+        p_time_taken_ms: timeUsedMs,
+        p_tab_switches: tabSwitchCount,
+        p_fullscreen_exits: fullscreenExitCount
+      })
+    }).catch(() => {}); // page is unloading — nothing we can show the user, fail silently
+  } catch(e) {
+    // never let an error here block the page from closing
+  }
+});
