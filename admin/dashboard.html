@@ -69,6 +69,7 @@
       <button class="tab-btn" data-tab="passcode">Passcode</button>
       <button class="tab-btn" data-tab="results">Results</button>
       <button class="tab-btn" data-tab="resources">Study Material</button>
+      <button class="tab-btn" data-tab="announcements">Announcements</button>
       <button class="tab-btn" data-tab="edit" id="edit-tab-btn">Edit Test</button>
     </div>
 
@@ -106,6 +107,20 @@
             </div>
           </div>
           <div id="edit-settings-msg" class="mt-8"></div>
+        </div>
+        <div class="shadow-card mt-16" style="margin-bottom:16px;">
+          <div class="grid grid-2">
+            <div class="field" style="margin-bottom:0;">
+              <label>Opens At (blank = open now)</label>
+              <input id="edit-opens-at" type="datetime-local">
+            </div>
+            <div class="field" style="margin-bottom:0;">
+              <label>Closes At (blank = no deadline)</label>
+              <input id="edit-closes-at" type="datetime-local">
+            </div>
+          </div>
+          <button class="btn btn-outline btn-block mt-8" id="edit-save-window-btn">Save Test Window</button>
+          <div id="edit-window-msg" class="mt-8"></div>
         </div>
         <div id="edit-section-tabs" class="tabs"></div>
         <div id="edit-questions-list"></div>
@@ -200,6 +215,27 @@
             <tbody id="results-table-body"><tr><td colspan="10" class="muted">Select a test above.</td></tr></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- ANNOUNCEMENTS -->
+    <div class="tab-panel" id="panel-announcements" style="display:none;">
+      <div class="shadow-card" style="max-width:520px;margin-bottom:20px;">
+        <p class="muted">Post an announcement — students will see a red dot on their notification bell until they open it.</p>
+        <div class="field">
+          <label>Title</label>
+          <input type="text" id="announcement-title" placeholder="e.g. Test Postponed">
+        </div>
+        <div class="field">
+          <label>Message</label>
+          <textarea id="announcement-message" rows="4" placeholder="Write your announcement here..."></textarea>
+        </div>
+        <button class="btn btn-primary btn-block" id="post-announcement-btn">📢 Post Announcement</button>
+        <div id="announcement-post-msg" class="mt-8"></div>
+      </div>
+      <div class="shadow-card">
+        <b>Past Announcements</b>
+        <div id="announcements-list" class="mt-16"><p class="muted">Loading...</p></div>
       </div>
     </div>
 
