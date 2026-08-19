@@ -230,12 +230,12 @@ signupForm.addEventListener('submit', async (e) => {
     return;
   }
 
-  // 1. Check passcode
-  const { data: settings, error: settingsErr } = await supabaseClient
-    .from('app_settings').select('signup_passcode').eq('id', 1).single();
+  // 1. Check passcode — verified server-side via RPC, so the real passcode is never sent to the browser.
+  const { data: isValid, error: settingsErr } = await supabaseClient
+    .rpc('verify_signup_passcode', { p_passcode: passcode });
 
   if(settingsErr){ btn.disabled=false; btn.textContent='Create Account'; showError('Could not verify passcode. Check your Supabase setup.'); return; }
-  if(!settings || settings.signup_passcode !== passcode){
+  if(!isValid){
     btn.disabled=false; btn.textContent='Create Account';
     showError('Incorrect passcode. Ask your admin for the correct one.');
     return;
