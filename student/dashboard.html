@@ -121,12 +121,23 @@
     <div class="pdf-modal">
       <div class="pdf-modal-head">
         <b id="pdf-modal-title">PDF</b>
-        <button id="pdf-modal-close">✕</button>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <span id="pdf-modal-pagenav" style="display:none;align-items:center;gap:8px;">
+            <button class="btn btn-outline btn-sm" id="pdf-modal-prev">←</button>
+            <span id="pdf-modal-pagenum" style="font-size:12.5px;">1 / 1</span>
+            <button class="btn btn-outline btn-sm" id="pdf-modal-next">→</button>
+          </span>
+          <button id="pdf-modal-close">✕</button>
+        </div>
       </div>
       <iframe id="pdf-modal-iframe" src=""></iframe>
+      <div id="pdf-modal-canvas-wrap" style="display:none;flex:1;overflow:auto;text-align:center;background:#525659;padding:16px 0;">
+        <canvas id="pdf-modal-canvas"></canvas>
+      </div>
     </div>
   </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../config.js"></script>
 <script src="../lib/supabaseClient.js"></script>
@@ -185,20 +196,73 @@ async function loadResources(){
   });
 }
 
-function openPdfPreview(title, url){
+let pdfModalDoc = null, pdfModalPage = 1;
+
+async function openPdfPreview(title, url){
   document.getElementById('pdf-modal-title').textContent = title;
-  document.getElementById('pdf-modal-iframe').src = toPdfPreviewUrl(url);
   document.getElementById('pdf-modal-overlay').classList.add('show');
+
+  const iframe = document.getElementById('pdf-modal-iframe');
+  const canvasWrap = document.getElementById('pdf-modal-canvas-wrap');
+  const pageNav = document.getElementById('pdf-modal-pagenav');
+  const isDriveLink = /drive\.google\.com\/file\/d\//.test(url);
+
+  if(isDriveLink){
+    // Google Drive's /preview URL explicitly allows iframe embedding.
+    canvasWrap.style.display = 'none';
+    pageNav.style.display = 'none';
+    iframe.style.display = 'block';
+    iframe.src = toPdfPreviewUrl(url);
+    return;
+  }
+
+  // Most other hosts (CDN links, direct .pdf URLs, etc.) block iframe embedding via
+  // X-Frame-Options even though the file itself is publicly reachable. Fetching the bytes
+  // ourselves and rendering with PDF.js sidesteps that restriction entirely.
+  iframe.style.display = 'none';
+  iframe.src = '';
+  canvasWrap.style.display = 'block';
+  pageNav.style.display = 'inline-flex';
+  document.getElementById('pdf-modal-pagenum').textContent = 'Loading...';
+
+  try {
+    const resp = await fetch(url);
+    if(!resp.ok) throw new Error('status ' + resp.status);
+    const buf = await resp.arrayBuffer();
+    pdfModalDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+    pdfModalPage = 1;
+    renderPdfModalPage();
+  } catch(err){
+    document.getElementById('pdf-modal-pagenum').textContent = '⚠ Could not load preview. Try Download instead.';
+  }
 }
-document.getElementById('pdf-modal-close').addEventListener('click', () => {
+
+async function renderPdfModalPage(){
+  if(!pdfModalDoc) return;
+  const page = await pdfModalDoc.getPage(pdfModalPage);
+  const viewport = page.getViewport({ scale: 1.3 });
+  const canvas = document.getElementById('pdf-modal-canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  document.getElementById('pdf-modal-pagenum').textContent = `${pdfModalPage} / ${pdfModalDoc.numPages}`;
+}
+
+document.getElementById('pdf-modal-prev').addEventListener('click', () => {
+  if(pdfModalDoc && pdfModalPage > 1){ pdfModalPage--; renderPdfModalPage(); }
+});
+document.getElementById('pdf-modal-next').addEventListener('click', () => {
+  if(pdfModalDoc && pdfModalPage < pdfModalDoc.numPages){ pdfModalPage++; renderPdfModalPage(); }
+});
+
+function closePdfModal(){
   document.getElementById('pdf-modal-overlay').classList.remove('show');
   document.getElementById('pdf-modal-iframe').src = '';
-});
+  pdfModalDoc = null;
+}
+document.getElementById('pdf-modal-close').addEventListener('click', closePdfModal);
 document.getElementById('pdf-modal-overlay').addEventListener('click', (e) => {
-  if(e.target.id === 'pdf-modal-overlay'){
-    document.getElementById('pdf-modal-overlay').classList.remove('show');
-    document.getElementById('pdf-modal-iframe').src = '';
-  }
+  if(e.target.id === 'pdf-modal-overlay') closePdfModal();
 });
 
 async function loadTests(){
